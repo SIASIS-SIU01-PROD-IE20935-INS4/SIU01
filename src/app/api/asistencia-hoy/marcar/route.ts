@@ -226,9 +226,9 @@ const validarPermisosRegistro = (
   }
 };
 
-const calcularSegundosHastaExpiracion = (): number => {
+const calcularSegundosHastaExpiracion = async (): Promise<number> => {
   // ✅ Usar la nueva función que maneja todos los offsets
-  const fechaActualPeru = obtenerFechaHoraActualPeru();
+  const fechaActualPeru = await obtenerFechaHoraActualPeru();
 
   // Crear fecha objetivo a las 20:00 del mismo día
   const fechaExpiracion = new Date(fechaActualPeru);
@@ -492,7 +492,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ✅ Usar la nueva función que maneja todos los offsets para obtener timestamp actual
-    const fechaActualPeru = obtenerFechaHoraActualPeru();
+    const fechaActualPeru = await obtenerFechaHoraActualPeru();
     const timestampActual = fechaActualPeru.getTime();
 
     // Calcular desfase en segundos
@@ -501,7 +501,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Crear clave para Redis usando la función original (mantiene retrocompatibilidad)
-    const fechaHoy = obtenerFechaActualPeru();
+    const fechaHoy = await obtenerFechaActualPeru();
     let clave: string;
 
     if (esEstudiante) {
@@ -529,14 +529,14 @@ export async function POST(req: NextRequest) {
             : EstadosAsistencia.Temprano;
 
         // Establecer la expiración
-        const segundosHastaExpiracion = calcularSegundosHastaExpiracion();
+        const segundosHastaExpiracion = await calcularSegundosHastaExpiracion();
         await redisClientInstance.set(clave, estado, segundosHastaExpiracion);
       } else {
         // Para personal: Valor es array [timestamp, desfaseSegundos]
         const valor = [timestampActual.toString(), desfaseSegundos.toString()];
 
         // Establecer la expiración
-        const segundosHastaExpiracion = calcularSegundosHastaExpiracion();
+        const segundosHastaExpiracion = await calcularSegundosHastaExpiracion();
         await redisClientInstance.set(clave, valor, segundosHastaExpiracion);
       }
     }
