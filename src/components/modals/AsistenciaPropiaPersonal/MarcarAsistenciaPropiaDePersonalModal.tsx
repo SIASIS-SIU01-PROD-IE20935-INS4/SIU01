@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import ModalContainer from "../ModalContainer";
 import BotonConIcono from "@/components/buttons/BotonConIcono";
 import LapizFirmando from "@/components/icons/LapizFirmando";
@@ -14,7 +14,7 @@ import Loader from "@/components/shared/loaders/Loader";
 import { ENTORNO } from "@/constants/ENTORNO";
 import { Entorno } from "@/interfaces/shared/Entornos";
 
-// ✅ NUEVAS IMPORTACIONES PARA SOCKETS
+// ✅ IMPORTACIONES PARA SOCKETS
 import { useSS01 } from "@/hooks/useSS01";
 import { TomaAsistenciaPersonalSIU01Events } from "@/SS01/sockets/events/AsistenciaDePersonal/frontend/TomaAsistenciaPersonalSIU01Events";
 import { SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER } from "@/SS01/sockets/events/AsistenciaDePersonal/interfaces/SalasTomaAsistenciaDePersonal";
@@ -28,9 +28,13 @@ import { HandlerAuxiliarAsistenciaResponse } from "@/lib/utils/local/db/models/D
 import { HandlerProfesorTutorSecundariaAsistenciaResponse } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/handlers/HandlerProfesorTutorSecundariaAsistenciaResponse";
 import { HandlerPersonalAdministrativoAsistenciaResponse } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/handlers/HandlerPersonalAdministrativoAsistenciaResponse";
 import userStorage from "@/lib/utils/local/db/models/UserStorage";
+import {
+  MENSAJES_CONEXION_SOCKET,
+  SOCKET_CONNECTION_TIMEOUT,
+} from "@/constants/SOCKET_FRONTEND_CONFIGURATION";
 
 // ========================================================================================
-// CONFIGURACIÓN POR ENTORNO (mantener la configuración existente)
+// CONFIGURACIÓN POR ENTORNO
 // ========================================================================================
 
 const TESTING_EXPLICITO = false;
@@ -115,16 +119,124 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
   setMostrarModalNoSePuedeUsarLaptop,
   setMostrarModalDispositivoSinGPS,
 }: MarcarAsistenciaPropiaDePersonalModalProps) => {
+  // ========================================================================================
+  // ESTADOS
+  // ========================================================================================
+
   const [estaProcessando, setEstaProcessando] = useState(false);
 
-  // ✅ NUEVO: Hook para conexión Socket.io
+  // 🆕 NUEVO: Estado para controlar la espera de conexión del socket
+  const [esperandoConexionSocket, setEsperandoConexionSocket] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [mensajeConexion, setMensajeConexion] = useState(
+    MENSAJES_CONEXION_SOCKET[
+      Math.floor(Math.random() * MENSAJES_CONEXION_SOCKET.length)
+    ]
+  );
+
+  // ✅ Hook para conexión Socket.io
   const { isReady, globalSocket } = useSS01();
 
-  // ✅ NUEVO: Función para enviar evento emisor después del registro exitoso
+  // Ref para el timeout
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ========================================================================================
+  // EFECTOS PARA MANEJO DE SOCKET CON TIMEOUT
+  // ========================================================================================
+
+  // 🚀 useEffect principal para manejar timeout de conexión de socket
+  useEffect(() => {
+    console.log("🔌 Iniciando espera de conexión de socket...", {
+      isReady,
+      timeout: SOCKET_CONNECTION_TIMEOUT,
+      mensaje: mensajeConexion,
+    });
+
+    // Si ya está conectado desde el inicio, no esperar
+    if (isReady) {
+      console.log("✅ Socket ya estaba conectado, saltando espera");
+      setEsperandoConexionSocket(false);
+      return;
+    }
+
+    // Establecer timeout para la espera máxima
+    timeoutRef.current = setTimeout(() => {
+      console.log(
+        `⏰ Timeout de ${SOCKET_CONNECTION_TIMEOUT}ms alcanzado, continuando sin socket`
+      );
+      setEsperandoConexionSocket(false);
+    }, SOCKET_CONNECTION_TIMEOUT);
+
+    // Cleanup function
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []); // Solo se ejecuta al montar el componente
+
+  // 🎯 useEffect para detectar cuando el socket se conecta
+  useEffect(() => {
+    if (isReady && esperandoConexionSocket) {
+      console.log("🎉 Socket conectado antes del timeout, continuando...");
+
+      // Limpiar timeout ya que el socket se conectó
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      setEsperandoConexionSocket(false);
+    }
+  }, [isReady, esperandoConexionSocket]);
+
+  // 🏠 useEffect para unirse a la sala cuando el socket esté listo y no estemos esperando
+  useEffect(() => {
+    if (!isReady || esperandoConexionSocket) {
+      return;
+    }
+
+    console.log("🔗 Uniéndose a sala de toma de asistencia:", {
+      rol: Rol,
+      modoRegistro,
+      sala: SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER[
+        Rol as PersonalDelColegio
+      ][modoRegistro],
+    });
+
+    // Crear y ejecutar emisor
+    const emitter =
+      new TomaAsistenciaPersonalSIU01Events.UNIRME_A_SALA_DE_TOMA_DE_ASISTENCIA_DE_PERSONAL_EMITTER(
+        SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER[
+          Rol as PersonalDelColegio
+        ][modoRegistro]
+      );
+    const sent = emitter.execute();
+
+    if (!sent) {
+      console.error("❌ Error al enviar el evento de unión a sala");
+    } else {
+      console.log(
+        "✅ Usuario unido exitosamente a la sala:",
+        SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER[
+          Rol as PersonalDelColegio
+        ][modoRegistro]
+      );
+    }
+  }, [Rol, modoRegistro, isReady, esperandoConexionSocket]);
+
+  // ========================================================================================
+  // FUNCIONES DE SOCKET
+  // ========================================================================================
+
+  // 📡 Función para enviar evento emisor después del registro exitoso
   const enviarEventoEmisoreAsistenciaRegistrada = useCallback(async () => {
     try {
       if (!isReady || !globalSocket) {
-        console.warn("⚠️ Socket no está listo para enviar evento emisor");
+        console.warn(
+          "⚠️ Socket no está listo para enviar evento emisor, saltando..."
+        );
         return;
       }
 
@@ -244,7 +356,11 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
       );
       // No lanzar error para no afectar el flujo principal del registro
     }
-  }, [isReady, globalSocket, modoRegistro]);
+  }, [isReady, globalSocket, modoRegistro, Rol]);
+
+  // ========================================================================================
+  // FUNCIONES DE GEOLOCALIZACIÓN
+  // ========================================================================================
 
   const verificarYSolicitarPermisos = async (): Promise<boolean> => {
     try {
@@ -383,6 +499,10 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
     });
   };
 
+  // ========================================================================================
+  // FUNCIÓN PRINCIPAL DE REGISTRO
+  // ========================================================================================
+
   const manejarRegistroAsistencia = useCallback(async () => {
     if (estaProcessando) return;
 
@@ -397,6 +517,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
         usaCoordenadasMockeadas: USAR_COORDENADAS_MOCKEADAS,
         soloPermitirCelulares: SOLO_PERMITIR_CELULARES_PARA_ASISTENCIA,
         testingExplicito: TESTING_EXPLICITO,
+        socketReady: isReady,
       });
 
       // PASO 1: Verificar tipo de dispositivo
@@ -427,7 +548,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
 
         console.log("✅ Asistencia registrada exitosamente (sin GPS)");
 
-        // ✅ NUEVO: Enviar evento emisor después del registro exitoso
+        // 📡 Enviar evento emisor si el socket está disponible
         await enviarEventoEmisoreAsistenciaRegistrada();
 
         eliminateModal();
@@ -560,7 +681,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
 
       console.log("✅ Asistencia registrada exitosamente");
 
-      // ✅ NUEVO: Enviar evento emisor después del registro exitoso
+      // 📡 Enviar evento emisor si el socket está disponible
       await enviarEventoEmisoreAsistenciaRegistrada();
 
       eliminateModal();
@@ -596,11 +717,34 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
     setMostrarModalFalloConexionAInternet,
     setMostrarModalNoSePuedeUsarLaptop,
     setMostrarModalDispositivoSinGPS,
-    enviarEventoEmisoreAsistenciaRegistrada, // ✅ NUEVA DEPENDENCIA
+    enviarEventoEmisoreAsistenciaRegistrada,
+    isReady,
   ]);
 
-  // Determinar texto y estilo según configuración
+  // ========================================================================================
+  // FUNCIONES DE RENDER
+  // ========================================================================================
+
+  // 🎨 Determinar texto y estilo según configuración
   const obtenerTextoModal = () => {
+    // 🚀 NUEVO: Si estamos esperando conexión del socket, mostrar mensaje especial
+    if (esperandoConexionSocket) {
+      return {
+        texto: (
+          <>
+            {mensajeConexion}
+            <br />
+            <br />
+            <span className="text-sm text-gray-600">
+              Esto solo tomará unos segundos...
+            </span>
+          </>
+        ),
+        boton: "Conectando...",
+        esConexionSocket: true,
+      };
+    }
+
     if (estaProcessando) {
       if (!REQUERIR_VALIDACION_GPS) {
         return {
@@ -617,6 +761,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
             </>
           ),
           boton: "Registrando...",
+          esConexionSocket: false,
         };
       } else if (USAR_COORDENADAS_MOCKEADAS) {
         return {
@@ -640,6 +785,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
             </>
           ),
           boton: "Verificando ubicación...",
+          esConexionSocket: false,
         };
       } else {
         return {
@@ -655,6 +801,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
             </>
           ),
           boton: "Verificando ubicación...",
+          esConexionSocket: false,
         };
       }
     } else {
@@ -674,6 +821,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
             </>
           ),
           boton: "🚀 Registrar (Sin GPS)",
+          esConexionSocket: false,
         };
       } else if (USAR_COORDENADAS_MOCKEADAS) {
         return {
@@ -701,6 +849,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
           boton: TESTING_EXPLICITO
             ? `🎭 Registrar (Modo Testing)`
             : `Registrar ${modoRegistroTextos[modoRegistro]}`,
+          esConexionSocket: false,
         };
       } else {
         return {
@@ -717,6 +866,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
             </>
           ),
           boton: `Registrar ${modoRegistroTextos[modoRegistro]}`,
+          esConexionSocket: false,
         };
       }
     }
@@ -731,7 +881,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
           {texto}
         </p>
 
-        {REQUERIR_VALIDACION_GPS && (
+        {REQUERIR_VALIDACION_GPS && !esperandoConexionSocket && (
           <img
             className="rounded-[5px] w-[11rem] xs:w-[11rem] sm:w-[11.5rem] md:w-[10.5rem] h-auto object-contain"
             src="/images/gif/UbicacionColegioViajeGuiado.gif"
@@ -739,23 +889,33 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
           />
         )}
 
-        <BotonConIcono
-          className={`${
-            modoRegistro === ModoRegistro.Entrada
-              ? "bg-verde-principal"
-              : "bg-rojo-oscuro"
-          } text-blanco flex gap-3 px-4 py-2 rounded-md text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
-          texto={boton}
-          IconTSX={
-            estaProcessando ? (
-              <Loader className="w-[1.5rem] bg-white p-[0.3rem]" />
-            ) : (
-              <LapizFirmando className="w-[1.5rem]" />
-            )
-          }
-          onClick={manejarRegistroAsistencia}
-          disabled={estaProcessando}
-        />
+        {/* 🚀 NUEVO: Mostrar botón solo si NO estamos esperando conexión del socket */}
+        {!esperandoConexionSocket && (
+          <BotonConIcono
+            className={`${
+              modoRegistro === ModoRegistro.Entrada
+                ? "bg-verde-principal"
+                : "bg-rojo-oscuro"
+            } text-blanco flex gap-3 px-4 py-2 rounded-md text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed`}
+            texto={boton}
+            IconTSX={
+              estaProcessando ? (
+                <Loader className="w-[1.5rem] bg-white p-[0.3rem]" />
+              ) : (
+                <LapizFirmando className="w-[1.5rem]" />
+              )
+            }
+            onClick={manejarRegistroAsistencia}
+            disabled={estaProcessando}
+          />
+        )}
+
+        {/* 🎨 NUEVO: Loader especial para conexión de socket */}
+        {esperandoConexionSocket && (
+          <div className="flex items-center justify-center">
+            <Loader className="w-[2rem] bg-blue-500 p-[0.4rem]" />
+          </div>
+        )}
       </div>
     </ModalContainer>
   );
