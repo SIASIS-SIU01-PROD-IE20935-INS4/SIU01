@@ -48,7 +48,6 @@ const selectHoraMinutoActual = (state: RootState) => {
   if (!fechaHora) return null;
 
   const fecha = new Date(fechaHora);
-  fecha.setHours(fecha.getHours() - 5);
 
   return {
     fecha,
@@ -85,9 +84,9 @@ const EstadoDeAsistenciaSegunHorarioDeAsistencia = ({
       if (!fechaHoraRedux) return "Calculando...";
 
       const fechaActual = new Date(fechaHoraRedux);
-      fechaActual.setHours(fechaActual.getHours() - 5);
 
-      const diff = fechaObjetivo.getTime() - fechaActual.getTime();
+      const diff =
+        fechaObjetivo.getTime() - fechaActual.getTime() + 5 * 60 * 60 * 1000;
       if (diff <= 0) return "00:00:00";
 
       const horas = Math.floor(diff / (1000 * 60 * 60));
@@ -126,6 +125,10 @@ const EstadoDeAsistenciaSegunHorarioDeAsistencia = ({
 
       // ✅ 1. Verificar si estamos en período de actualización de datos
       if (horaMinutoActual.hora < HORA_ACTUALIZACION_DATOS_ASISTENCIA_DIARIOS) {
+        console.log(
+          "c% LA HORA ES " + horaMinutoActual.hora,
+          "font-size:2rem; color:cyan"
+        );
         return {
           tipo: "datos-pendientes",
           titulo: "Sistema actualizando datos",
@@ -221,7 +224,6 @@ const EstadoDeAsistenciaSegunHorarioDeAsistencia = ({
           const fechaActual = new Date(
             String(store.getState().others.fechaHoraActualReal.fechaHora)
           );
-          fechaActual.setHours(fechaActual.getHours() - 5);
 
           const inicioHoy = new Date(fechaActual);
           inicioHoy.setHours(
@@ -270,7 +272,6 @@ const EstadoDeAsistenciaSegunHorarioDeAsistencia = ({
         const fechaActual = new Date(
           String(store.getState().others.fechaHoraActualReal.fechaHora)
         );
-        fechaActual.setHours(fechaActual.getHours() - 5);
 
         const finHoy = new Date(fechaActual);
         finHoy.setHours(horarioFin.getHours(), horarioFin.getMinutes(), 0, 0);
@@ -306,7 +307,6 @@ const EstadoDeAsistenciaSegunHorarioDeAsistencia = ({
         const fechaActual = new Date(
           String(store.getState().others.fechaHoraActualReal.fechaHora)
         );
-        fechaActual.setHours(fechaActual.getHours() - 5);
 
         const finHoy = new Date(fechaActual);
         finHoy.setHours(horarioFin.getHours(), horarioFin.getMinutes(), 0, 0);
