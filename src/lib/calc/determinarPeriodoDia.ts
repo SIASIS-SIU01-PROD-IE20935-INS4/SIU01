@@ -1,6 +1,7 @@
 // Define el enum para los períodos del día
 
-import { PeriodoDia } from "@/Assets/voice/others/SaludosDIa";
+import { PeriodoDia } from "@/Assets/voice/others/SaludosDelDia";
+
 
 /**
  * Determina si un timestamp corresponde a la mañana, tarde o noche según los siguientes rangos:

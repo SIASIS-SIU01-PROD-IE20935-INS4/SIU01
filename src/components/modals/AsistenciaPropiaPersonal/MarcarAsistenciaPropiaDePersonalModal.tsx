@@ -23,8 +23,8 @@ const TESTING_EXPLICITO = false; // ✅ Cambiar a true para mostrar mensajes de 
 
 // 🎯 Configuración de validación GPS según entorno
 const REQUERIR_VALIDACION_GPS_SEGUN_ENTORNO: Record<Entorno, boolean> = {
-  [Entorno.LOCAL]: true,
-  [Entorno.DESARROLLO]: true, // ✅ GPS habilitado (solicitar permisos)
+  [Entorno.LOCAL]: false,
+  [Entorno.DESARROLLO]: false, // ✅ GPS habilitado (solicitar permisos)
   [Entorno.CERTIFICACION]: true,
   [Entorno.PRODUCCION]: true,
   [Entorno.TEST]: true,
@@ -33,8 +33,8 @@ const REQUERIR_VALIDACION_GPS_SEGUN_ENTORNO: Record<Entorno, boolean> = {
 // 🎭 Configuración de coordenadas mockeadas según entorno
 const USAR_COORDENADAS_MOCKEADAS_SEGUN_ENTORNO: Record<Entorno, boolean> = {
   [Entorno.LOCAL]: false,
-  [Entorno.DESARROLLO]: true, // ✅ Reemplazar con coordenadas mockeadas al final
-  [Entorno.CERTIFICACION]: true,
+  [Entorno.DESARROLLO]: false,
+  [Entorno.CERTIFICACION]: true, // ✅ Reemplazar con coordenadas mockeadas al final
   [Entorno.PRODUCCION]: false,
   [Entorno.TEST]: false,
 };
