@@ -15,8 +15,8 @@ export class HandlerPersonalAdministrativoAsistenciaResponse extends HandlerAsis
     return this.personalAdministrativoData.HorarioPersonal;
   }
 
-  public getMiDNI(): string {
-    return this.personalAdministrativoData.Mi_DNI;
+  public getMiIdentificador(): string {
+    return this.personalAdministrativoData.Mi_Identificador;
   }
 
   public estaHorarioActivo(horario: {

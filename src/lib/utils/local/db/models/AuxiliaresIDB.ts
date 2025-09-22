@@ -1,12 +1,11 @@
 import { AuxiliarSinContraseña } from "@/interfaces/shared/apis/shared/others/types";
-import IndexedDBConnection from "../IndexedDBConnection";
+
 import {
   TablasSistema,
   ITablaInfo,
   TablasLocal,
 } from "../../../../../interfaces/shared/TablasSistema";
 import {
-  ApiResponseBase,
   ErrorResponseAPIBase,
   MessageProperty,
 } from "@/interfaces/shared/apis/types";
@@ -17,16 +16,16 @@ import AllErrorTypes, {
 } from "../../../../../interfaces/shared/errors";
 import { SiasisAPIS } from "@/interfaces/shared/SiasisComponents";
 import comprobarSincronizacionDeTabla from "@/lib/helpers/validations/comprobarSincronizacionDeTabla";
-import fetchSiasisApiGenerator from "@/lib/helpers/generators/fetchSiasisApisGenerator";
 import ultimaActualizacionTablasLocalesIDB from "./UltimaActualizacionTablasLocalesIDB";
 import { DatabaseModificationOperations } from "@/interfaces/shared/DatabaseModificationOperations";
-import { GetAuxiliaresSuccessResponse } from "@/interfaces/shared/apis/api01/auxiliares/types";
+import { Endpoint_Get_Auxiliares_API01 } from "@/lib/utils/backend/endpoints/api01/Auxiliares";
+import IndexedDBConnection from "@/constants/singleton/IndexedDBConnection";
 
 // Tipo para la entidad (sin atributos de fechas)
 export type IAuxiliarLocal = AuxiliarSinContraseña;
 
 export interface IAuxiliarFilter {
-  DNI_Auxiliar?: string;
+  Id_Auxiliar?: string;
   Nombres?: string;
   Apellidos?: string;
   Estado?: boolean;
@@ -51,7 +50,7 @@ export class AuxiliaresIDB {
     try {
       const debeSincronizar = await comprobarSincronizacionDeTabla(
         this.tablaInfo,
-        "API01"
+        this.siasisAPI
       );
 
       if (!debeSincronizar) {
@@ -72,37 +71,9 @@ export class AuxiliaresIDB {
    */
   private async fetchYActualizarAuxiliares(): Promise<void> {
     try {
-      // Usar el generador para API01 (o la que corresponda)
-      const { fetchSiasisAPI } = fetchSiasisApiGenerator(this.siasisAPI);
-
-      // Realizar la petición al endpoint
-      const fetchCancelable = await fetchSiasisAPI({
-        endpoint: "/api/auxiliares",
-        method: "GET",
-      });
-
-      if (!fetchCancelable) {
-        throw new Error("No se pudo crear la petición de auxiliares");
-      }
-
-      // Ejecutar la petición
-      const response = await fetchCancelable.fetch();
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener auxiliares: ${response.statusText}`);
-      }
-
-      const objectResponse = (await response.json()) as ApiResponseBase;
-
-      if (!objectResponse.success) {
-        throw new Error(
-          `Error en respuesta de auxiliares: ${objectResponse.message}`
-        );
-      }
-
       // Extraer los auxiliares del cuerpo de la respuesta
       const { data: auxiliares } =
-        objectResponse as GetAuxiliaresSuccessResponse;
+        await Endpoint_Get_Auxiliares_API01.realizarPeticion();
 
       // Actualizar auxiliares en la base de datos local
       const result = await this.upsertFromServer(auxiliares);
@@ -229,7 +200,7 @@ export class AuxiliaresIDB {
             .result as IDBCursorWithValue;
           if (cursor) {
             // Añadir el DNI del auxiliar actual
-            dnis.push(cursor.value.DNI_Auxiliar);
+            dnis.push(cursor.value.Id_Auxiliar);
             cursor.continue();
           } else {
             // No hay más registros, resolvemos con el array de DNIs
@@ -298,7 +269,7 @@ export class AuxiliaresIDB {
 
       // 2. Crear conjunto de DNIs del servidor para búsqueda rápida
       const dnisServidor = new Set(
-        auxiliaresServidor.map((aux) => aux.DNI_Auxiliar)
+        auxiliaresServidor.map((aux) => aux.Id_Auxiliar)
       );
 
       // 3. Identificar DNIs que ya no existen en el servidor
@@ -325,8 +296,8 @@ export class AuxiliaresIDB {
         for (const auxiliarServidor of lote) {
           try {
             // Verificar si el auxiliar ya existe
-            const existeAuxiliar = await this.getByDNI(
-              auxiliarServidor.DNI_Auxiliar
+            const existeAuxiliar = await this.getById(
+              auxiliarServidor.Id_Auxiliar
             );
 
             // Obtener un store fresco para cada operación
@@ -351,7 +322,7 @@ export class AuxiliaresIDB {
               request.onerror = () => {
                 result.errors++;
                 console.error(
-                  `Error al guardar auxiliar ${auxiliarServidor.DNI_Auxiliar}:`,
+                  `Error al guardar auxiliar ${auxiliarServidor.Id_Auxiliar}:`,
                   request.error
                 );
                 reject(request.error);
@@ -360,7 +331,7 @@ export class AuxiliaresIDB {
           } catch (error) {
             result.errors++;
             console.error(
-              `Error al procesar auxiliar ${auxiliarServidor.DNI_Auxiliar}:`,
+              `Error al procesar auxiliar ${auxiliarServidor.Id_Auxiliar}:`,
               error
             );
           }
@@ -383,7 +354,7 @@ export class AuxiliaresIDB {
    * @param dni DNI del auxiliar
    * @returns Auxiliar encontrado o null
    */
-  public async getByDNI(dni: string): Promise<IAuxiliarLocal | null> {
+  public async getById(dni: string): Promise<IAuxiliarLocal | null> {
     try {
       const store = await IndexedDBConnection.getStore(this.nombreTablaLocal);
 

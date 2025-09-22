@@ -24,7 +24,7 @@ export interface HorarioLaboral {
 export type DirectivoParaTomaDeAsistencia = Pick<
   T_Directivos,
   | "Id_Directivo"
-  | "DNI"
+  | "Identificador_Nacional"
   | "Nombres"
   | "Apellidos"
   | "Genero"
@@ -36,7 +36,7 @@ export type DirectivoParaTomaDeAsistencia = Pick<
 
 export type PersonalAdministrativoParaTomaDeAsistencia = Pick<
   T_Personal_Administrativo,
-  | "DNI_Personal_Administrativo"
+  | "Id_Personal_Administrativo"
   | "Genero"
   | "Nombres"
   | "Apellidos"
@@ -49,7 +49,7 @@ export type PersonalAdministrativoParaTomaDeAsistencia = Pick<
 
 export type ProfesoresPrimariaParaTomaDeAsistencia = Pick<
   T_Profesores_Primaria,
-  | "DNI_Profesor_Primaria"
+  | "Id_Profesor_Primaria"
   | "Genero"
   | "Nombres"
   | "Apellidos"
@@ -58,7 +58,7 @@ export type ProfesoresPrimariaParaTomaDeAsistencia = Pick<
 
 export type ProfesorTutorSecundariaParaTomaDeAsistencia = Pick<
   T_Profesores_Secundaria,
-  | "DNI_Profesor_Secundaria"
+  | "Id_Profesor_Secundaria"
   | "Nombres"
   | "Apellidos"
   | "Genero"
@@ -70,7 +70,7 @@ export type ProfesorTutorSecundariaParaTomaDeAsistencia = Pick<
 
 export type AuxiliaresParaTomaDeAsistencia = Pick<
   T_Auxiliares,
-  "DNI_Auxiliar" | "Nombres" | "Apellidos" | "Genero" | "Google_Drive_Foto_ID"
+  "Id_Auxiliar" | "Nombres" | "Apellidos" | "Genero" | "Google_Drive_Foto_ID"
 >;
 
 export interface RangoFechas {
@@ -144,14 +144,14 @@ export interface ProfesorPrimariaAsistenciaResponse
   extends BaseAsistenciaResponse {
   HorarioTomaAsistenciaProfesorPrimaria: HorarioTomaAsistencia;
   HorarioEscolarPrimaria: HorarioTomaAsistencia;
-  Mi_DNI: string;
+  Mi_Identificador: string;
 }
 
 // Auxiliar gets their schedule and secondary level student schedule
 export interface AuxiliarAsistenciaResponse extends BaseAsistenciaResponse {
   HorarioTomaAsistenciaAuxiliares: HorarioTomaAsistencia;
   HorarioEscolarSecundaria: HorarioTomaAsistencia;
-  Mi_DNI: string;
+  Mi_Identificador: string;
 }
 
 // ProfesorSecundaria and Tutor get their own schedule from the list and secondary schedule
@@ -164,7 +164,7 @@ export interface ProfesorTutorSecundariaAsistenciaResponse
       }
     | false;
   HorarioEscolarSecundaria: HorarioTomaAsistencia;
-  Mi_DNI: string;
+  Mi_Identificador: string;
 }
 
 // Responsable gets both primary and secondary schedules
@@ -181,5 +181,5 @@ export interface PersonalAdministrativoAsistenciaResponse
         Horario_Laboral_Salida: Date;
       }
     | false;
-  Mi_DNI: string;
+  Mi_Identificador: string;
 }

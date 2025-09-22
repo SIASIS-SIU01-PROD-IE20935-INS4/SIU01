@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LogoutTypes, ErrorDetailsForLogout } from "@/interfaces/LogoutTypes";
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
-import { NOMBRE_ARCHIVO_CON_DATOS_ASISTENCIA_DIARIOS } from "@/constants/NOMBRE_ARCHIVOS_EN_BLOBS";
 import {
   AuxiliarAsistenciaResponse,
   BaseAsistenciaResponse,
@@ -12,31 +11,10 @@ import {
   ProfesorTutorSecundariaAsistenciaResponse,
   ResponsableAsistenciaResponse,
 } from "@/interfaces/shared/Asistencia/DatosAsistenciaHoyIE20935";
-
 import { NivelEducativo } from "@/interfaces/shared/NivelEducativo";
 import { verifyAuthToken } from "@/lib/utils/backend/auth/functions/jwtComprobations";
 import { redirectToLogin } from "@/lib/utils/backend/auth/functions/redirectToLogin";
-import { redisClient } from "../../../../config/Redis/RedisClient";
-
-// Función auxiliar para verificar si el contenido es realmente JSON
-async function esContenidoJSON(response: Response): Promise<boolean> {
-  try {
-    // Verificar header Content-Type
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      // Si no es application/json, verificamos el contenido mismo
-      const texto = await response.clone().text();
-
-      // Intentar hacer un parse del texto para ver si es JSON válido
-      JSON.parse(texto);
-      return true;
-    }
-    return true;
-  } catch (error) {
-    console.warn("El contenido recibido no es JSON válido:", error);
-    return false;
-  }
-}
+import { obtenerDatosAsistenciaHoy } from "../_utils/obtenerDatosAsistenciaHoy";
 
 export async function GET(req: NextRequest) {
   try {
@@ -44,65 +22,12 @@ export async function GET(req: NextRequest) {
 
     if (error) return error;
 
-    let datosCompletos: DatosAsistenciaHoyIE20935;
-    let usandoRespaldo = false;
-
-    try {
-      // Intento principal: obtener datos del blob
-      const response = await fetch(
-        `${process.env
-          .RDP04_THIS_INSTANCE_VERCEL_BLOB_BASE_URL!}/${NOMBRE_ARCHIVO_CON_DATOS_ASISTENCIA_DIARIOS}`
-      );
-
-      if (!response.ok || !(await esContenidoJSON(response))) {
-        throw new Error("Respuesta del blob inválida o no es JSON");
-      }
-
-      datosCompletos = await response.json();
-    } catch (blobError) {
-      // Plan B: Si el primer fetch falla, intentar con Google Drive
-      console.warn(
-        "Error al obtener datos del blob, usando respaldo:",
-        blobError
-      );
-      usandoRespaldo = true;
-
-      try {
-        // Obtener el ID de Google Drive desde Redis
-        const archivoDatosAsistenciaHoyGoogleDriveID = await redisClient().get(
-          NOMBRE_ARCHIVO_CON_DATOS_ASISTENCIA_DIARIOS
-        );
-
-        if (!archivoDatosAsistenciaHoyGoogleDriveID) {
-          throw new Error("No se encontró el ID del archivo en Redis");
-        }
-
-        // Hacer el fetch de respaldo desde Google Drive
-        const respaldoResponse = await fetch(
-          `https://drive.google.com/uc?export=download&id=${archivoDatosAsistenciaHoyGoogleDriveID}`
-        );
-
-        if (
-          !respaldoResponse.ok ||
-          !(await esContenidoJSON(respaldoResponse))
-        ) {
-          throw new Error(
-            `Error en la respuesta de respaldo: ${respaldoResponse.status} ${respaldoResponse.statusText}`
-          );
-        }
-
-        datosCompletos = await respaldoResponse.json();
-        console.log("Datos obtenidos exitosamente desde respaldo Google Drive");
-      } catch (respaldoError) {
-        // Si también falla el respaldo, lanzar un error más descriptivo
-        console.error("Error al obtener datos desde respaldo:", respaldoError);
-        throw new Error(
-          `Falló el acceso principal y el respaldo: ${
-            (respaldoError as Error).message
-          }`
-        );
-      }
-    }
+    // Obtener datos usando el nuevo servicio
+    const {
+      datos: datosCompletos,
+      fuente,
+      mensaje,
+    } = await obtenerDatosAsistenciaHoy();
 
     // Filtrar datos según el rol
     const datosFiltrados = filtrarDatosSegunRol(
@@ -114,12 +39,12 @@ export async function GET(req: NextRequest) {
     // Devolver los datos filtrados con indicador de fuente
     return NextResponse.json({
       ...datosFiltrados,
-      _debug: usandoRespaldo
-        ? "Datos obtenidos desde respaldo"
-        : "Datos obtenidos desde fuente principal",
+      _debug: mensaje,
+      _fuente: fuente,
     });
   } catch (error) {
     console.error("Error al obtener datos de asistencia:", error);
+
     // Determinar el tipo de error
     let logoutType = LogoutTypes.ERROR_SISTEMA;
     const errorDetails: ErrorDetailsForLogout = {
@@ -135,7 +60,8 @@ export async function GET(req: NextRequest) {
         error.message.includes("fetch") ||
         error.message.includes("network") ||
         error.message.includes("ECONNREFUSED") ||
-        error.message.includes("timeout")
+        error.message.includes("timeout") ||
+        error.message.includes("Timeout de petición HTTP")
       ) {
         logoutType = LogoutTypes.ERROR_RED;
         errorDetails.mensaje =
@@ -145,14 +71,18 @@ export async function GET(req: NextRequest) {
       else if (
         error.message.includes("JSON") ||
         error.message.includes("parse") ||
-        error.message.includes("no es JSON válido")
+        error.message.includes("no contiene JSON válido")
       ) {
         logoutType = LogoutTypes.ERROR_DATOS_CORRUPTOS;
         errorDetails.mensaje = "Error al procesar los datos de asistencia";
         errorDetails.contexto = "Formato de datos inválido";
       }
       // Si falló la búsqueda en Redis
-      else if (error.message.includes("No se encontró el ID")) {
+      else if (
+        error.message.includes(
+          "No se encontró el ID del archivo de respaldo en Redis"
+        )
+      ) {
         logoutType = LogoutTypes.ERROR_DATOS_NO_DISPONIBLES;
         errorDetails.mensaje =
           "No se pudo encontrar la información de asistencia";
@@ -167,6 +97,16 @@ export async function GET(req: NextRequest) {
           "No se pudo obtener la información de asistencia";
         errorDetails.contexto =
           "Falló tanto el acceso a blob como a Google Drive";
+      }
+      // Si es un error HTTP específico
+      else if (
+        error.message.includes("Error HTTP en blob") ||
+        error.message.includes("Error HTTP en respaldo")
+      ) {
+        logoutType = LogoutTypes.ERROR_RED;
+        errorDetails.mensaje =
+          "Error del servidor al obtener datos de asistencia";
+        errorDetails.contexto = "Respuesta HTTP inválida";
       }
 
       errorDetails.mensaje += `: ${error.message}`;
@@ -216,7 +156,7 @@ function filtrarDatosSegunRol(
           datos.HorariosLaboraresGenerales.TomaAsistenciaProfesorPrimaria,
         HorarioEscolarPrimaria:
           datos.HorariosEscolares[NivelEducativo.PRIMARIA],
-        Mi_DNI: idUsuario,
+        Mi_Identificador: idUsuario,
       } as ProfesorPrimariaAsistenciaResponse;
 
     case RolesSistema.Auxiliar:
@@ -227,14 +167,14 @@ function filtrarDatosSegunRol(
           datos.HorariosLaboraresGenerales.TomaAsistenciaAuxiliares,
         HorarioEscolarSecundaria:
           datos.HorariosEscolares[NivelEducativo.SECUNDARIA],
-        Mi_DNI: idUsuario,
+        Mi_Identificador: idUsuario,
       } as AuxiliarAsistenciaResponse;
 
     case RolesSistema.ProfesorSecundaria:
     case RolesSistema.Tutor:
       // Profesores de secundaria y tutores reciben su propio horario y el de estudiantes de secundaria
       const profesorInfo = datos.ListaDeProfesoresSecundaria.find(
-        (p) => p.DNI_Profesor_Secundaria === idUsuario
+        (p) => p.Id_Profesor_Secundaria === idUsuario
       );
 
       return {
@@ -247,7 +187,7 @@ function filtrarDatosSegunRol(
           : false,
         HorarioEscolarSecundaria:
           datos.HorariosEscolares[NivelEducativo.SECUNDARIA],
-        Mi_DNI: idUsuario,
+        Mi_Identificador: idUsuario,
       } as ProfesorTutorSecundariaAsistenciaResponse;
 
     case RolesSistema.Responsable:
@@ -260,7 +200,7 @@ function filtrarDatosSegunRol(
     case RolesSistema.PersonalAdministrativo:
       // Personal administrativo recibe solo su propio horario
       const personalInfo = datos.ListaDePersonalesAdministrativos.find(
-        (p) => p.DNI_Personal_Administrativo == idUsuario
+        (p) => p.Id_Personal_Administrativo == idUsuario
       );
       return {
         ...datosBase,
@@ -270,7 +210,7 @@ function filtrarDatosSegunRol(
               Horario_Laboral_Salida: personalInfo.Hora_Salida_Dia_Actual,
             }
           : false,
-        Mi_DNI: idUsuario,
+        Mi_Identificador: idUsuario,
       } as PersonalAdministrativoAsistenciaResponse;
 
     default:

@@ -8,9 +8,9 @@ import {
   ProfesorTutorSecundariaAsistenciaResponse,
   ResponsableAsistenciaResponse,
 } from "@/interfaces/shared/Asistencia/DatosAsistenciaHoyIE20935";
-import IndexedDBConnection from "../../IndexedDBConnection";
+
 import { LogoutTypes, ErrorDetailsForLogout } from "@/interfaces/LogoutTypes";
-import { logout } from "@/lib/helpers/logout";
+import { logout } from "@/lib/utils/frontend/auth/logout";
 import store from "@/global/store";
 import { HandlerDirectivoAsistenciaResponse } from "./handlers/HandlerDirectivoAsistenciaResponse";
 import { HandlerProfesorPrimariaAsistenciaResponse } from "./handlers/HandlerProfesorPrimariaAsistenciaResponse";
@@ -24,6 +24,8 @@ import {
   EstadoTomaAsistenciaResponseBody,
   TipoAsistencia,
 } from "@/interfaces/shared/AsistenciaRequests";
+import { TablasLocal } from "@/interfaces/shared/TablasSistema";
+import IndexedDBConnection from "@/constants/singleton/IndexedDBConnection";
 
 // Interfaz para el objeto guardado en IndexedDB
 export interface DatosAsistenciaAlmacenados {
@@ -34,7 +36,8 @@ export interface DatosAsistenciaAlmacenados {
 }
 
 export class DatosAsistenciaHoyIDB {
-  private readonly storeName: string = "datos_asistencia_hoy";
+  private readonly storeName: TablasLocal =
+    TablasLocal.Tabla_Archivos_Asistencia_Hoy;
   private static readonly STORAGE_KEY = "datos_asistencia_actuales";
   // Constantes para las nuevas keys
   private static readonly ESTADO_TOMA_ASISTENCIA_PERSONAL_KEY =

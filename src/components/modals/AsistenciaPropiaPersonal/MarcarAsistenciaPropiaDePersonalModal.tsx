@@ -5,7 +5,7 @@ import LapizFirmando from "@/components/icons/LapizFirmando";
 import {
   ModoRegistro,
   modoRegistroTextos,
-} from "@/interfaces/shared/ModoRegistroPersonal";
+} from "@/interfaces/shared/ModoRegistro";
 import { estaDentroDelColegioIE20935 } from "@/lib/helpers/functions/geolocation/getEstadoDeUbicacion";
 import { PuntoGeografico } from "@/interfaces/Geolocalizacion";
 import { verificarDisponibilidadGPS } from "@/lib/helpers/functions/geolocation/verificarDisponibilidadGPS";
@@ -18,10 +18,7 @@ import { Entorno } from "@/interfaces/shared/Entornos";
 import { useSS01 } from "@/hooks/useSS01";
 import { TomaAsistenciaPersonalSIU01Events } from "@/SS01/sockets/events/AsistenciaDePersonal/frontend/TomaAsistenciaPersonalSIU01Events";
 import { SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER } from "@/SS01/sockets/events/AsistenciaDePersonal/interfaces/SalasTomaAsistenciaDePersonal";
-import {
-  PersonalDelColegio,
-  RolesSistema,
-} from "@/interfaces/shared/RolesSistema";
+import { RolesSistema } from "@/interfaces/shared/RolesSistema";
 import { AsistenciaDePersonalIDB } from "@/lib/utils/local/db/models/AsistenciaDePersonal/AsistenciaDePersonalIDB";
 import { HandlerProfesorPrimariaAsistenciaResponse } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/handlers/HandlerProfesorPrimariaAsistenciaResponse";
 import { HandlerAuxiliarAsistenciaResponse } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/handlers/HandlerAuxiliarAsistenciaResponse";
@@ -32,6 +29,7 @@ import {
   MENSAJES_CONEXION_SOCKET,
   SOCKET_CONNECTION_TIMEOUT,
 } from "@/constants/SOCKET_FRONTEND_CONFIGURATION";
+import { PersonalDelColegio } from "@/interfaces/shared/PersonalDelColegio";
 
 // ========================================================================================
 // CONFIGURACIÓN POR ENTORNO
@@ -41,7 +39,7 @@ const TESTING_EXPLICITO = false;
 
 const REQUERIR_VALIDACION_GPS_SEGUN_ENTORNO: Record<Entorno, boolean> = {
   [Entorno.LOCAL]: true,
-  [Entorno.DESARROLLO]: false,
+  [Entorno.DESARROLLO]: true,
   [Entorno.CERTIFICACION]: true,
   [Entorno.PRODUCCION]: true,
   [Entorno.TEST]: true,
@@ -263,7 +261,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
           | HandlerAuxiliarAsistenciaResponse
           | HandlerProfesorTutorSecundariaAsistenciaResponse
           | HandlerPersonalAdministrativoAsistenciaResponse
-      ).getMiDNI();
+      ).getMiIdentificador();
 
       const miNombres = await userStorage.getNombres();
       const miApellidos = await userStorage.getApellidos();
@@ -317,7 +315,7 @@ const MarcarAsistenciaPropiaDePersonalModal = ({
         new TomaAsistenciaPersonalSIU01Events.MARQUE_LA_ASISTENCIA_DE_ESTE_PERSONAL_EMITTER(
           {
             Mi_Socket_Id: globalSocket.id,
-            id_o_dni: miDNI,
+            idUsuario: miDNI,
             genero: miGenero!,
             nombres: miNombres!,
             apellidos: miApellidos!,

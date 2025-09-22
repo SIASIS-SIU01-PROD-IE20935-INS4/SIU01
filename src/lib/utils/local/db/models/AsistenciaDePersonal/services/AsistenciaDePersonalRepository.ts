@@ -11,7 +11,7 @@ import {
 import { Meses } from "@/interfaces/shared/Meses";
 import IndexedDBConnection from "../../../IndexedDBConnection";
 import { AsistenciaDePersonalMapper } from "./AsistenciaDePersonalMapper";
-import { AsistenciaDePersonalDateHelper } from "./AsistenciaDePersonalDateHelper";
+import { AsistenciaDateHelper } from "../../utils/AsistenciaDateHelper";
 
 /**
  * 🎯 RESPONSABILIDAD: Operaciones CRUD con IndexedDB
@@ -26,11 +26,11 @@ import { AsistenciaDePersonalDateHelper } from "./AsistenciaDePersonalDateHelper
  */
 export class AsistenciaDePersonalRepository {
   private mapper: AsistenciaDePersonalMapper;
-  private dateHelper: AsistenciaDePersonalDateHelper;
+  private dateHelper: AsistenciaDateHelper;
 
   constructor(
     mapper: AsistenciaDePersonalMapper,
-    dateHelper: AsistenciaDePersonalDateHelper
+    dateHelper: AsistenciaDateHelper
   ) {
     this.mapper = mapper;
     this.dateHelper = dateHelper;
@@ -38,7 +38,7 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Guarda un registro mensual de asistencia usando el ID real de la API
-   * ✅ ACTUALIZADO: Soporta ID_o_DNI_Personal
+   * ✅ ACTUALIZADO: Soporta idUsuario_Personal
    * ✅ NUEVO: Siempre incluye timestamp peruano actual
    */
   public async guardarRegistroMensual(
@@ -72,7 +72,7 @@ export class AsistenciaDePersonalRepository {
             Mes: datos.mes,
             [idFieldName]: this.convertirIdentificadorParaDB(
               tipoPersonal,
-              datos.ID_o_DNI_Personal
+              datos.idUsuario_Personal
             ),
             // ✅ NUEVO: SIEMPRE incluir timestamp peruano actual
             ultima_fecha_actualizacion: timestampPeruanoActual,
@@ -142,7 +142,7 @@ export class AsistenciaDePersonalRepository {
   public async verificarDatosEnUltimosDiasEscolares(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    id_o_dni: string | number,
+    idUsuario: string | number,
     mes: number,
     ultimosDiasEscolares: number[]
   ): Promise<{
@@ -155,7 +155,7 @@ export class AsistenciaDePersonalRepository {
       const registro = await this.obtenerRegistroMensual(
         tipoPersonal,
         modoRegistro,
-        id_o_dni,
+        idUsuario,
         mes
       );
 
@@ -212,7 +212,7 @@ export class AsistenciaDePersonalRepository {
         }
       }
 
-      console.log(`📊 Verificación días escolares - ${id_o_dni}:`, {
+      console.log(`📊 Verificación días escolares - ${idUsuario}:`, {
         ultimosDiasEscolares,
         diasConDatos,
         diasSinDatos,
@@ -243,13 +243,13 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Obtiene el registro mensual de asistencia para un personal específico
-   * ✅ ACTUALIZADO: Usa ID_o_DNI_Personal
+   * ✅ ACTUALIZADO: Usa idUsuario_Personal
    * ✅ MEJORADO: Mejor logging para debugging
    */
   public async obtenerRegistroMensual(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    ID_o_DNI_Personal: string | number,
+    idUsuario_Personal: string | number,
     mes: number,
     id_registro_mensual?: number
   ): Promise<AsistenciaMensualPersonalLocal | null> {
@@ -303,7 +303,7 @@ export class AsistenciaDePersonalRepository {
       }
 
       // ✅ VALIDAR valores antes de usar en índice
-      this.validarValoresParaIndice(ID_o_DNI_Personal, mes, tipoPersonal);
+      this.validarValoresParaIndice(idUsuario_Personal, mes, tipoPersonal);
 
       const indexName = this.mapper.getIndexNameForPersonalMes(tipoPersonal);
 
@@ -314,13 +314,13 @@ export class AsistenciaDePersonalRepository {
           // ✅ CONVERTIR identificador al tipo correcto
           const identificadorConvertido = this.convertirIdentificadorParaDB(
             tipoPersonal,
-            ID_o_DNI_Personal
+            idUsuario_Personal
           );
           const keyValue = [identificadorConvertido, mes];
 
           console.log(`🔍 Buscando en índice: ${indexName}`, {
             tipoPersonal,
-            identificadorOriginal: ID_o_DNI_Personal,
+            identificadorOriginal: idUsuario_Personal,
             identificadorConvertido,
             mes,
             keyValue,
@@ -338,14 +338,14 @@ export class AsistenciaDePersonalRepository {
                 );
 
               console.log(
-                `📖 Registro encontrado para ${tipoPersonal} - ${ID_o_DNI_Personal} - mes ${mes}, última actualización: ${new Date(
+                `📖 Registro encontrado para ${tipoPersonal} - ${idUsuario_Personal} - mes ${mes}, última actualización: ${new Date(
                   registroMensual.ultima_fecha_actualizacion
                 ).toLocaleString("es-PE")}`
               );
               resolve(registroMensual);
             } else {
               console.log(
-                `📊 No se encontró registro para: ${tipoPersonal} - ${ID_o_DNI_Personal} - mes ${mes}`
+                `📊 No se encontró registro para: ${tipoPersonal} - ${idUsuario_Personal} - mes ${mes}`
               );
               resolve(null);
             }
@@ -376,21 +376,21 @@ export class AsistenciaDePersonalRepository {
    */
   private convertirIdentificadorParaDB(
     tipoPersonal: TipoPersonal,
-    id_o_dni: string | number
+    idUsuario: string | number
   ): string | number {
     if (
       tipoPersonal === TipoPersonal.DIRECTIVO &&
-      typeof id_o_dni === "string"
+      typeof idUsuario === "string"
     ) {
       // Para directivos: convertir a número (Id_Directivo es INT en la BD)
-      const id = parseInt(id_o_dni, 10);
+      const id = parseInt(idUsuario, 10);
       if (isNaN(id)) {
-        throw new Error(`ID de directivo inválido: ${id_o_dni}`);
+        throw new Error(`ID de directivo inválido: ${idUsuario}`);
       }
       return id;
     } else {
       // Para otros roles: mantener como string (DNI)
-      return id_o_dni;
+      return idUsuario;
     }
   }
 
@@ -398,11 +398,11 @@ export class AsistenciaDePersonalRepository {
    * ✅ CORREGIDO: Validar valores antes de usar en índices
    */
   private validarValoresParaIndice(
-    id_o_dni: string | number,
+    idUsuario: string | number,
     mes: number,
     tipoPersonal: TipoPersonal
   ): void {
-    if (!id_o_dni || String(id_o_dni).trim() === "") {
+    if (!idUsuario || String(idUsuario).trim() === "") {
       throw new Error(`ID/DNI no puede estar vacío para ${tipoPersonal}`);
     }
 
@@ -412,24 +412,24 @@ export class AsistenciaDePersonalRepository {
 
     // Validar formato específico
     if (
-      !this.mapper.validarFormatoIdentificador(tipoPersonal, String(id_o_dni))
+      !this.mapper.validarFormatoIdentificador(tipoPersonal, String(idUsuario))
     ) {
       const tipoEsperado =
         this.mapper.getTipoIdentificadorLegible(tipoPersonal);
       throw new Error(
-        `Formato de ${tipoEsperado} inválido para ${tipoPersonal}: ${id_o_dni}`
+        `Formato de ${tipoEsperado} inválido para ${tipoPersonal}: ${idUsuario}`
       );
     }
   }
 
   /**
    * Elimina registros mensuales locales
-   * ✅ ACTUALIZADO: Usa idODni
+   * ✅ ACTUALIZADO: Usa id
    */
   public async eliminarRegistroMensual(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    id_o_dni: string | number,
+    idUsuario: string | number,
     mes: number
   ): Promise<OperationResult> {
     try {
@@ -441,7 +441,7 @@ export class AsistenciaDePersonalRepository {
       return new Promise((resolve, reject) => {
         try {
           const index = store.index(indexName);
-          const keyValue = [id_o_dni, mes];
+          const keyValue = [idUsuario, mes];
           const request = index.get(keyValue);
 
           request.onsuccess = () => {
@@ -455,7 +455,7 @@ export class AsistenciaDePersonalRepository {
               const deleteRequest = store.delete(id);
               deleteRequest.onsuccess = () => {
                 console.log(
-                  `🗑️ Registro eliminado: ${storeName} - ${id_o_dni} - mes ${mes}`
+                  `🗑️ Registro eliminado: ${storeName} - ${idUsuario} - mes ${mes}`
                 );
                 resolve({
                   exitoso: true,
@@ -505,12 +505,12 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Verifica si existe un registro mensual para un personal específico
-   * ✅ ACTUALIZADO: Usa idODni
+   * ✅ ACTUALIZADO: Usa id
    */
   public async verificarExistenciaRegistroMensual(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    idODni: string,
+    id: string,
     mes: number
   ): Promise<number | null> {
     try {
@@ -526,7 +526,7 @@ export class AsistenciaDePersonalRepository {
       return new Promise((resolve, reject) => {
         try {
           const index = store.index(indexName);
-          const keyValue = [idODni, mes];
+          const keyValue = [id, mes];
           const request = index.get(keyValue);
 
           request.onsuccess = () => {
@@ -566,7 +566,7 @@ export class AsistenciaDePersonalRepository {
   public async verificarSiExisteRegistroDiario(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    idODni: string,
+    id: string,
     mes: number,
     dia: number
   ): Promise<boolean> {
@@ -576,7 +576,7 @@ export class AsistenciaDePersonalRepository {
       const store = await IndexedDBConnection.getStore(storeName, "readonly");
 
       // ✅ AGREGAR: Validar valores antes de usar en índice
-      this.validarValoresParaIndice(idODni, mes, tipoPersonal);
+      this.validarValoresParaIndice(id, mes, tipoPersonal);
 
       const indexName = this.mapper.getIndexNameForPersonalMes(tipoPersonal);
 
@@ -587,7 +587,7 @@ export class AsistenciaDePersonalRepository {
           // ✅ AGREGAR: Convertir identificador al tipo correcto
           const identificadorConvertido = this.convertirIdentificadorParaDB(
             tipoPersonal,
-            idODni
+            id
           );
           const keyValue = [identificadorConvertido, mes];
 
@@ -595,7 +595,7 @@ export class AsistenciaDePersonalRepository {
             `🔍 verificarSiExisteRegistroDiario - Índice: ${indexName}`,
             {
               tipoPersonal,
-              identificadorOriginal: idODni,
+              identificadorOriginal: id,
               identificadorConvertido,
               mes,
               dia,
@@ -689,7 +689,7 @@ export class AsistenciaDePersonalRepository {
                   return {
                     Id_Registro_Mensual: item[idField],
                     mes: item.Mes,
-                    ID_o_DNI_Personal: item[idFieldName],
+                    idUsuario_Personal: item[idFieldName],
                     registros:
                       modoRegistro === ModoRegistro.Entrada
                         ? item.Entradas
@@ -731,12 +731,12 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Actualiza un registro existente agregando un nuevo día
-   * ✅ ACTUALIZADO: Usa idODni y garantiza timestamp actualizado
+   * ✅ ACTUALIZADO: Usa id y garantiza timestamp actualizado
    */
   public async actualizarRegistroExistente(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    idODni: string,
+    id: string,
     mes: number,
     dia: number,
     registro: RegistroEntradaSalida,
@@ -744,13 +744,13 @@ export class AsistenciaDePersonalRepository {
   ): Promise<OperationResult> {
     try {
       console.log(
-        `🔄 Actualizando registro existente para ${tipoPersonal} - ${idODni} - mes ${mes} - día ${dia}`
+        `🔄 Actualizando registro existente para ${tipoPersonal} - ${id} - mes ${mes} - día ${dia}`
       );
 
       const registroActual = await this.obtenerRegistroMensual(
         tipoPersonal,
         modoRegistro,
-        idODni,
+        id,
         mes,
         idRegistroExistente
       );
@@ -795,7 +795,7 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Mapea un registro obtenido del store a la interfaz AsistenciaMensualPersonalLocal
-   * ✅ ACTUALIZADO: Usa ID_o_DNI_Personal y maneja timestamp correctamente
+   * ✅ ACTUALIZADO: Usa idUsuario_Personal y maneja timestamp correctamente
    */
   private mapearRegistroMensualDesdeStore(
     registroStore: any,
@@ -819,7 +819,7 @@ export class AsistenciaDePersonalRepository {
     return {
       Id_Registro_Mensual: registroStore[idField],
       mes: registroStore.Mes,
-      ID_o_DNI_Personal: registroStore[idPersonalField],
+      idUsuario_Personal: registroStore[idPersonalField],
       registros:
         modoRegistro === ModoRegistro.Entrada
           ? registroStore.Entradas
@@ -830,32 +830,32 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Elimina un día específico de un registro mensual
-   * ✅ ACTUALIZADO: Usa idODni y actualiza timestamp al modificar
+   * ✅ ACTUALIZADO: Usa id y actualiza timestamp al modificar
    */
   public async eliminarDiaDeRegistroMensual(
     tipoPersonal: TipoPersonal,
     modoRegistro: ModoRegistro,
-    id_o_dni: string | number,
+    idUsuario: string | number,
     mes: number,
     dia: number
   ): Promise<OperationResult> {
     try {
       console.log(
-        `🗑️ Eliminando día ${dia} del registro mensual para ${tipoPersonal} - ${id_o_dni} - mes ${mes}`
+        `🗑️ Eliminando día ${dia} del registro mensual para ${tipoPersonal} - ${idUsuario} - mes ${mes}`
       );
 
       // Obtener el registro mensual actual
       const registroMensual = await this.obtenerRegistroMensual(
         tipoPersonal,
         modoRegistro,
-        id_o_dni,
+        idUsuario,
         mes
       );
 
       if (!registroMensual) {
         return {
           exitoso: false,
-          mensaje: `No se encontró registro mensual para ID/DNI: ${id_o_dni}, mes: ${mes}`,
+          mensaje: `No se encontró registro mensual para ID/DNI: ${idUsuario}, mes: ${mes}`,
         };
       }
 
@@ -879,7 +879,7 @@ export class AsistenciaDePersonalRepository {
         return await this.eliminarRegistroMensual(
           tipoPersonal,
           modoRegistro,
-          id_o_dni,
+          idUsuario,
           mes
         );
       } else {
@@ -916,7 +916,7 @@ export class AsistenciaDePersonalRepository {
 
   /**
    * Valida la estructura de un registro antes de guardarlo
-   * ✅ ACTUALIZADO: Validación mejorada para ID_o_DNI_Personal y timestamp
+   * ✅ ACTUALIZADO: Validación mejorada para idUsuario_Personal y timestamp
    */
   public validarEstructuraAntesSalvar(
     datos: AsistenciaMensualPersonalLocal,
@@ -934,24 +934,24 @@ export class AsistenciaDePersonalRepository {
 
     // ✅ VALIDACIÓN MEJORADA: Soporte para ID (directivos) y DNI (otros)
     if (
-      typeof datos.ID_o_DNI_Personal !== "string" ||
-      datos.ID_o_DNI_Personal.trim().length === 0
+      typeof datos.idUsuario_Personal !== "string" ||
+      datos.idUsuario_Personal.trim().length === 0
     ) {
-      errores.push("ID_o_DNI_Personal debe ser un string no vacío");
+      errores.push("idUsuario_Personal debe ser un string no vacío");
     } else {
       // Validación específica según el tipo de personal
       if (tipoPersonal === TipoPersonal.DIRECTIVO) {
         // Para directivos: puede ser cualquier string válido (usualmente números)
-        if (!/^[a-zA-Z0-9]+$/.test(datos.ID_o_DNI_Personal)) {
+        if (!/^[a-zA-Z0-9]+$/.test(datos.idUsuario_Personal)) {
           errores.push(
-            "ID_o_DNI_Personal para directivos debe contener solo caracteres alfanuméricos"
+            "idUsuario_Personal para directivos debe contener solo caracteres alfanuméricos"
           );
         }
       } else {
         // Para otros roles: debe ser DNI de 8 dígitos
-        if (!/^\d{8}$/.test(datos.ID_o_DNI_Personal)) {
+        if (!/^\d{8}$/.test(datos.idUsuario_Personal)) {
           errores.push(
-            "ID_o_DNI_Personal para personal no-directivo debe ser un DNI de 8 dígitos"
+            "idUsuario_Personal para personal no-directivo debe ser un DNI de 8 dígitos"
           );
         }
       }

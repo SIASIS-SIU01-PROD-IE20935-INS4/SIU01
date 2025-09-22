@@ -17,10 +17,7 @@ import { AsistenciaDePersonalIDB } from "@/lib/utils/local/db/models/AsistenciaD
 import { convertirAFormato12Horas } from "@/lib/helpers/formatters/fechas-hora/formatearAFormato12Horas";
 import { ENTORNO } from "@/constants/ENTORNO";
 import { Entorno } from "@/interfaces/shared/Entornos";
-import {
-  EventosIDB,
-  IEventoLocal,
-} from "@/lib/utils/local/db/models/eventos/EventosIDB";
+
 import { RegistroEntradaSalida } from "@/interfaces/shared/AsistenciaRequests";
 import { AsistenciaMensualPersonalLocal } from "@/lib/utils/local/db/models/AsistenciaDePersonal/AsistenciaDePersonalTypes";
 import userStorage from "@/lib/utils/local/db/models/UserStorage";
@@ -34,6 +31,10 @@ import TablaRegistrosAsistencia from "@/components/asistencia-personal/registros
 import InfoUsuarioAsistencia from "@/components/asistencia-personal/registros-asistencia-personal/InfoUsuarioAsistencia";
 import { DatosAsistenciaHoyIDB } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/DatosAsistenciaHoyIDB";
 import { GenericUser } from "@/interfaces/shared/GenericUser";
+import {
+  EventosIDB,
+  IEventoLocal,
+} from "@/lib/utils/local/db/models/EventosLocal/EventosIDB";
 
 // 🔧 CONSTANTE DE CONFIGURACIÓN PARA DESARROLLO
 const CONSIDERAR_DIAS_NO_ESCOLARES = false; // false = solo días laborales, true = incluir sábados y domingos
@@ -172,7 +173,7 @@ const MisAsistencias = () => {
           return;
         }
 
-        const miDNI = (handler as any).getMiDNI();
+        const miDNI = (handler as any).getMiIdentificador();
         if (!miDNI) {
           console.warn("⚠️ No se pudo obtener mi DNI para sincronizar marcado");
           return;
@@ -183,7 +184,7 @@ const MisAsistencias = () => {
           Nombres: nombres,
           Apellidos: apellidos,
           Rol: rol,
-          ID_O_DNI_Usuario: miDNI,
+          ID_Usuario: miDNI,
           Google_Drive_Foto_ID: userData?.Google_Drive_Foto_ID || null,
         };
 
@@ -894,7 +895,7 @@ const MisAsistencias = () => {
       });
 
       const dniValueCell = worksheet.getCell(`I${filaActual}`);
-      dniValueCell.value = misDatos.ID_O_DNI_Usuario;
+      dniValueCell.value = misDatos.ID_Usuario;
       dniValueCell.style = {
         font: { size: 10 },
         alignment: { horizontal: "left", vertical: "middle", indent: 1 },
@@ -1578,8 +1579,9 @@ const MisAsistencias = () => {
     ? ({
         Nombres: misDatos.Nombres,
         Apellidos: misDatos.Apellidos,
-        DNI_Directivo: misDatos.ID_O_DNI_Usuario,
-        ID_O_DNI_Usuario: misDatos.ID_O_DNI_Usuario || "N/A",
+        Identificador_Nacional_Directivo:
+          misDatos.Identificador_Nacional_Directivo,
+        ID_Usuario: misDatos.ID_Usuario || "N/A",
         Google_Drive_Foto_ID: misDatos.Google_Drive_Foto_ID,
       } as GenericUser)
     : null;

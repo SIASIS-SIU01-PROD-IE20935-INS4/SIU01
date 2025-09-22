@@ -1,4 +1,4 @@
- "use client";
+"use client";
 import ContrasenaIcon from "../icons/ContrasenaIcon";
 import UsuarioIcon from "../icons/UsuarioIcon";
 import VolverIcon from "../icons/VolverIcon";
@@ -9,7 +9,6 @@ import useRequestAPIFeatures from "@/hooks/useRequestSiasisAPIFeatures";
 import Loader from "./loaders/Loader";
 import ErrorMessage from "./errors/ErrorMessage";
 import SuccessMessage from "./successes/SuccessMessage";
-import userStorage from "@/lib/utils/local/db/models/UserStorage";
 import { SiasisAPIS } from "@/interfaces/shared/SiasisComponents";
 import {
   ApiResponseBase,
@@ -18,8 +17,7 @@ import {
 import { ResponseSuccessLogin } from "@/interfaces/shared/apis/shared/login/types";
 import { MisDatosErrorResponseAPI01 } from "@/interfaces/shared/apis/api01/mis-datos/types";
 import { Link } from "next-view-transitions";
-import UltimaModificacionTablasIDB from "@/lib/utils/local/db/models/UltimaModificacionTablasIDB";
-import { IndexedDBConnection } from "@/lib/utils/local/db/IndexedDBConnection";
+
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
 import {
   SE_MOSTRARON_COMUNICADOS_DE_HOY_KEY,
@@ -121,17 +119,24 @@ const PlantillaLogin = ({ rol, siasisAPI, endpoint }: PlantillaLoginProps) => {
         throw new Error(message);
       }
 
+      const { IndexedDBConnection } = await import(
+        "@/lib/utils/local/db/IndexedDBConnection"
+      );
+
       // Guardar rol del usuario en la propiedad estática Y localStorage automáticamente
       IndexedDBConnection.rol = data.Rol as RolesSistema;
+      IndexedDBConnection.PostfixIDBFromUserData =
+        formularioLogin.Nombre_Usuario;
+
+      const { default: userStorage } = await import(
+        "@/lib/utils/local/db/models/UserStorage"
+      );
 
       // Guardando data en IndexedDB
       await userStorage.saveUserData({
         ...data,
         ultimaSincronizacionTablas: Date.now(),
       });
-
-      // Sincronizando las modificaciones de tablas
-      await new UltimaModificacionTablasIDB(siasisAPI).sync(true);
 
       //CADA VES QUE SE INICIE SESION, SE DEBE MOSTRAR LOS COMUNICADOS DEL DIA DE HOY
       sessionStorage.setItem(
@@ -179,7 +184,9 @@ const PlantillaLogin = ({ rol, siasisAPI, endpoint }: PlantillaLoginProps) => {
             <h2 className="text-[0.9rem] text-gris-oscuro mt-3">
               Inicio de Sesión
             </h2>
-            <h3 className="text-[1.5rem] font-bold text-gris-oscuro text-wrap -break-words">{rol}</h3>
+            <h3 className="text-[1.5rem] font-bold text-gris-oscuro text-wrap -break-words">
+              {rol}
+            </h3>
 
             <form className="mt-4" onSubmit={handleSubmit}>
               <div className="mb-3 flex items-center border border-color-interfaz rounded-lg overflow-hidden">

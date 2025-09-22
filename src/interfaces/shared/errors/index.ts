@@ -44,6 +44,7 @@ export enum UserErrorTypes {
   USER_ROLE_MISMATCH = "USER_ROLE_MISMATCH",
   USER_SUSPENDED = "USER_SUSPENDED", // 🆕 Usuario suspendido
   USER_DELETED = "USER_DELETED", // 🆕 Usuario eliminado
+  UNAUTHORIZED_ACCESS = "UNAUTHORIZED_ACCESS", // 🆕 Acceso no autorizado
 }
 
 /**
@@ -74,7 +75,7 @@ export enum SystemErrorTypes {
  * Errores relacionados a validaciones de datos
  */
 export enum ValidationErrorTypes {
-  INVALID_DNI = "INVALID_DNI",
+  INVALID_USER_IDENTIFIER = "INVALID_USER_IDENTIFIER",
   INVALID_GENDER = "INVALID_GENDER",
   INVALID_PHONE = "INVALID_PHONE",
   INVALID_EMAIL = "INVALID_EMAIL",
@@ -87,6 +88,7 @@ export enum ValidationErrorTypes {
   REQUIRED_FIELDS = "REQUIRED_FIELDS",
   INVALID_REFERENCE = "INVALID_REFERENCE",
   VALUE_ALREADY_EXISTS = "VALUE_ALREADY_EXISTS",
+  INVALID_DNI="INVALID_DNI",
   INVALID_DATE_FORMAT = "INVALID_DATE_FORMAT", // 🆕 Formato de fecha inválido
   DATE_OUT_OF_RANGE = "DATE_OUT_OF_RANGE", // 🆕 Fecha fuera de rango
   INVALID_TIME_FORMAT = "INVALID_TIME_FORMAT", // 🆕 Formato de hora inválido
@@ -282,4 +284,3 @@ export const ErrorGroups = {
     RequestErrorTypes.MISSING_PARAMETERS,
   ],
 } as const;
-

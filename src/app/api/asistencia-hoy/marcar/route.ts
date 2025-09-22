@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EstadosAsistencia } from "@/interfaces/shared/EstadosAsistenciaEstudiantes";
 import { ActoresSistema } from "@/interfaces/shared/ActoresSistema";
-import {
-  RegistrarAsistenciaIndividualRequestBody,
-  RegistrarAsistenciaIndividualSuccessResponse,
-} from "@/interfaces/shared/apis/api01/asistencia/types";
-import { validateDNI } from "@/lib/helpers/validators/data/validateDNI";
+
+import { validateIdActor } from "@/lib/helpers/validators/data/validateIdActor";
 import {
   PermissionErrorTypes,
   RequestErrorTypes,
@@ -14,16 +10,17 @@ import {
 import { redisClient } from "../../../../../config/Redis/RedisClient";
 import { ErrorResponseAPIBase } from "@/interfaces/shared/apis/types";
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
-import { TipoAsistencia } from "@/interfaces/shared/AsistenciaRequests";
+import {
+  RegistrarAsistenciaIndividualRequestBody,
+  RegistrarAsistenciaIndividualSuccessResponse,
+  TipoAsistencia,
+} from "@/interfaces/shared/AsistenciaRequests";
 import { HORA_MAXIMA_EXPIRACION_PARA_REGISTROS_EN_REDIS } from "@/constants/expirations";
 import {
   obtenerFechaActualPeru,
   obtenerFechaHoraActualPeru,
 } from "../../_helpers/obtenerFechaActualPeru";
 import { verifyAuthToken } from "@/lib/utils/backend/auth/functions/jwtComprobations";
-
-// Constantes de configuración
-const MINUTOS_TOLERANCIA = 5; // 5 minutos de tolerancia para considerar llegada temprana
 
 /**
  * Mapea un rol del sistema al actor correspondiente para registro de asistencia personal
@@ -54,8 +51,8 @@ const validarPermisosRegistro = (
   rol: RolesSistema,
   actor: ActoresSistema,
   tipoAsistencia: TipoAsistencia,
-  idODniARegistrar: string,
-  miIdODni: string,
+  idARegistrar: string,
+  miid: string,
   esRegistroPropio: boolean = false,
   grado?: number,
   seccion?: string,
@@ -103,7 +100,7 @@ const validarPermisosRegistro = (
         }
       } else {
         // Para asistencia personal: solo su propio registro
-        if (!esRegistroPropio && idODniARegistrar !== miIdODni) {
+        if (!esRegistroPropio && idARegistrar !== miid) {
           return {
             esValido: false,
             mensaje:
@@ -141,7 +138,7 @@ const validarPermisosRegistro = (
         }
       } else {
         // Para asistencia personal: solo su propio registro
-        if (!esRegistroPropio && idODniARegistrar !== miIdODni) {
+        if (!esRegistroPropio && idARegistrar !== miid) {
           return {
             esValido: false,
             mensaje:
@@ -169,7 +166,7 @@ const validarPermisosRegistro = (
         };
       } else {
         // Para asistencia personal: solo su propio registro
-        if (!esRegistroPropio && idODniARegistrar !== miIdODni) {
+        if (!esRegistroPropio && idARegistrar !== miid) {
           return {
             esValido: false,
             mensaje:
@@ -196,7 +193,7 @@ const validarPermisosRegistro = (
         };
       } else {
         // Para asistencia personal: solo su propio registro
-        if (!esRegistroPropio && idODniARegistrar !== miIdODni) {
+        if (!esRegistroPropio && idARegistrar !== miid) {
           return {
             esValido: false,
             mensaje:
@@ -265,7 +262,7 @@ export async function POST(req: NextRequest) {
 
     if (error && !rol && !decodedToken) return error;
 
-    const MI_ID_O_DNI = decodedToken.ID_Usuario; // ✅ Para directivos: ID, para otros: DNI
+    const MI_idUsuario = decodedToken.ID_Usuario; // ✅ Para directivos: ID, para otros: DNI
 
     // Parsear el cuerpo de la solicitud como JSON
     const body =
@@ -273,28 +270,44 @@ export async function POST(req: NextRequest) {
 
     const {
       Actor,
-      ID_o_DNI,
+      Id_Usuario,
+      Id_Estudiante,
       FechaHoraEsperadaISO,
       ModoRegistro,
       TipoAsistencia: tipoAsistenciaParam,
+      desfaseSegundosAsistenciaEstudiante,
       NivelDelEstudiante,
       Grado,
       Seccion,
     } = body;
 
-    console.log("HORA ESPERADA ISO", FechaHoraEsperadaISO);
-
-    // ✅ NUEVA LÓGICA: Detectar si es registro propio
-    // Si no se envía Actor, ID_o_DNI, ni TipoAsistencia = registro propio
-    const esRegistroPropio = !Actor && !ID_o_DNI && !tipoAsistenciaParam;
+    // ✅ NUEVA LÓGICA: Determinar tipo de registro
+    const esRegistroEstudiante = !!(
+      Id_Estudiante && typeof desfaseSegundosAsistenciaEstudiante === "number"
+    );
+    const esRegistroPersonal = !!(Id_Usuario && FechaHoraEsperadaISO);
+    const esRegistroPropio = !esRegistroEstudiante && !esRegistroPersonal;
 
     let actorFinal: ActoresSistema;
-    let idODniFinal: string;
+    let idFinal: string;
     let tipoAsistenciaFinal: TipoAsistencia;
+    let desfaseSegundos: number;
+    let timestampActual: number = 0;
 
     if (esRegistroPropio) {
-      // ✅ REGISTRO PROPIO: Solo requiere FechaHoraEsperadaISO y ModoRegistro
+      // ✅ REGISTRO PROPIO: Solo requiere ModoRegistro y FechaHoraEsperadaISO
       console.log(`🔍 Registro propio detectado para rol: ${rol}`);
+
+      if (!FechaHoraEsperadaISO) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Se requiere FechaHoraEsperadaISO para registro propio",
+            errorType: RequestErrorTypes.INVALID_PARAMETERS,
+          },
+          { status: 400 }
+        );
+      }
 
       // Mapear rol a actor
       const actorMapeado = mapearRolAActorPersonal(rol!);
@@ -310,132 +323,39 @@ export async function POST(req: NextRequest) {
       }
 
       actorFinal = actorMapeado;
-      idODniFinal = MI_ID_O_DNI; // ✅ Usar ID/DNI del token
+      idFinal = MI_idUsuario; // ✅ Usar ID/DNI del token
       tipoAsistenciaFinal = TipoAsistencia.ParaPersonal; // ✅ Siempre Personal para registro propio
-    } else {
-      // ✅ REGISTRO DE OTROS: Requiere todos los campos
-      console.log(`🔍 Registro de otros detectado para rol: ${rol}`);
 
-      // Validar que se proporcionaron todos los campos necesarios
-      if (!Actor || !ID_o_DNI || !tipoAsistenciaParam) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Para registrar asistencia de otros se requieren Actor, ID_o_DNI y TipoAsistencia",
-            errorType: RequestErrorTypes.INVALID_PARAMETERS,
-          },
-          { status: 400 }
-        );
-      }
-
-      // Validar Actor
-      if (!Object.values(ActoresSistema).includes(Actor as ActoresSistema)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Actor no válido",
-            errorType: RequestErrorTypes.INVALID_PARAMETERS,
-          },
-          { status: 400 }
-        );
-      }
-
-      // ✅ NUEVA VALIDACIÓN: ID_o_DNI puede ser ID (directivos) o DNI (otros)
-      if (
-        !ID_o_DNI ||
-        typeof ID_o_DNI !== "string" ||
-        ID_o_DNI.trim().length === 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "ID_o_DNI es requerido y debe ser válido",
-            errorType: RequestErrorTypes.INVALID_PARAMETERS,
-          },
-          { status: 400 }
-        );
-      }
-
-      // Para estudiantes y personal no-directivo, validar que sea DNI de 8 dígitos
-      if (Actor !== ActoresSistema.Directivo) {
-        const dniValidation = validateDNI(ID_o_DNI, true);
-        if (!dniValidation.isValid) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: `ID_o_DNI inválido para ${Actor}: ${dniValidation.errorMessage}`,
-              errorType: dniValidation.errorType,
-            },
-            { status: 400 }
-          );
-        }
-      }
-      // Para directivos, el ID puede ser cualquier string válido (números generalmente)
-
-      // Validar TipoAsistencia
-      if (!Object.values(TipoAsistencia).includes(tipoAsistenciaParam)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "TipoAsistencia no válido",
-            errorType: RequestErrorTypes.INVALID_PARAMETERS,
-          },
-          { status: 400 }
-        );
-      }
-
-      actorFinal = Actor as ActoresSistema;
-      idODniFinal = ID_o_DNI;
-      tipoAsistenciaFinal = tipoAsistenciaParam;
-    }
-
-    // Validar parámetros comunes obligatorios
-    if (!FechaHoraEsperadaISO || !ModoRegistro) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Se requieren FechaHoraEsperadaISO y ModoRegistro",
-          errorType: RequestErrorTypes.INVALID_PARAMETERS,
-        },
-        { status: 400 }
+      // Calcular desfase para registro propio
+      const fechaActualPeru = await obtenerFechaHoraActualPeru();
+      timestampActual = fechaActualPeru.getTime();
+      desfaseSegundos = Math.floor(
+        (timestampActual - new Date(FechaHoraEsperadaISO).getTime()) / 1000
       );
-    }
+    } else if (esRegistroEstudiante) {
+      // ✅ REGISTRO DE ESTUDIANTE: Requiere Id_Estudiante + desfaseSegundosAsistenciaEstudiante
+      console.log(`🔍 Registro de estudiante detectado`);
 
-    // Validar Modo de Registro
-    if (!Object.values(ModoRegistro).includes(ModoRegistro)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Modo de registro no válido",
-          errorType: RequestErrorTypes.INVALID_PARAMETERS,
-        },
-        { status: 400 }
-      );
-    }
-
-    const esEstudiante = actorFinal === ActoresSistema.Estudiante;
-
-    if (esEstudiante) {
-      // Validar que se proporcionaron datos requeridos para estudiantes
-      if (!NivelDelEstudiante) {
+      // Validar ID del estudiante
+      const idValidation = validateIdActor(Id_Estudiante!, true);
+      if (!idValidation.isValid) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Se requiere nivel educativo para registrar asistencia de estudiantes",
-            errorType: RequestErrorTypes.INVALID_PARAMETERS,
+            message: `ID de estudiante inválido: ${idValidation.errorMessage}`,
+            errorType: idValidation.errorType,
           },
           { status: 400 }
         );
       }
 
-      if (!Grado || !Seccion) {
+      // Validar datos de aula para estudiantes
+      if (!NivelDelEstudiante || !Grado || !Seccion) {
         return NextResponse.json(
           {
             success: false,
             message:
-              "Se requieren grado y sección para registrar asistencia de estudiantes",
+              "Se requieren nivel educativo, grado y sección para registrar estudiantes",
             errorType: RequestErrorTypes.INVALID_PARAMETERS,
           },
           { status: 400 }
@@ -465,15 +385,114 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      actorFinal = ActoresSistema.Estudiante;
+      idFinal = Id_Estudiante!;
+      desfaseSegundos = desfaseSegundosAsistenciaEstudiante!;
+
+      // Determinar tipo de asistencia basado en nivel educativo
+      if (NivelDelEstudiante.toLowerCase().includes("primaria")) {
+        tipoAsistenciaFinal = TipoAsistencia.ParaEstudiantesPrimaria;
+      } else {
+        tipoAsistenciaFinal = TipoAsistencia.ParaEstudiantesSecundaria;
+      }
+    } else if (esRegistroPersonal) {
+      // ✅ REGISTRO DE PERSONAL: Requiere Id_Usuario + FechaHoraEsperadaISO
+      console.log(`🔍 Registro de personal detectado`);
+
+      // Validar campos necesarios
+      if (!Actor || !tipoAsistenciaParam) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Para registrar personal se requieren Actor y TipoAsistencia",
+            errorType: RequestErrorTypes.INVALID_PARAMETERS,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Validar Actor
+      if (!Object.values(ActoresSistema).includes(Actor as ActoresSistema)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Actor no válido",
+            errorType: RequestErrorTypes.INVALID_PARAMETERS,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Validar TipoAsistencia
+      if (!Object.values(TipoAsistencia).includes(tipoAsistenciaParam)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "TipoAsistencia no válido",
+            errorType: RequestErrorTypes.INVALID_PARAMETERS,
+          },
+          { status: 400 }
+        );
+      }
+
+      // ✅ Validación de ID según el actor
+      if (Actor !== ActoresSistema.Directivo) {
+        const idValidation = validateIdActor(Id_Usuario!, true);
+        if (!idValidation.isValid) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `ID de usuario inválido para ${Actor}: ${idValidation.errorMessage}`,
+              errorType: idValidation.errorType,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      actorFinal = Actor as ActoresSistema;
+      idFinal = Id_Usuario!;
+      tipoAsistenciaFinal = tipoAsistenciaParam;
+
+      // Calcular desfase para registro de personal
+      const fechaActualPeru = await obtenerFechaHoraActualPeru();
+      timestampActual = fechaActualPeru.getTime();
+      desfaseSegundos = Math.floor(
+        (timestampActual - new Date(FechaHoraEsperadaISO).getTime()) / 1000
+      );
+    } else {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Debe especificar o registro de estudiante (Id_Estudiante + desfase) o personal (Id_Usuario + FechaHoraEsperadaISO)",
+          errorType: RequestErrorTypes.INVALID_PARAMETERS,
+        },
+        { status: 400 }
+      );
     }
 
-    // ✅ NUEVA VALIDACIÓN: Verificar permisos de registro
+    // Validar ModoRegistro
+    if (!ModoRegistro || !Object.values(ModoRegistro).includes(ModoRegistro)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Se requiere un ModoRegistro válido",
+          errorType: RequestErrorTypes.INVALID_PARAMETERS,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ VALIDACIÓN DE PERMISOS
     const validacionPermisos = validarPermisosRegistro(
       rol!,
       actorFinal,
       tipoAsistenciaFinal,
-      idODniFinal,
-      MI_ID_O_DNI,
+      idFinal,
+      MI_idUsuario,
       esRegistroPropio,
       Grado,
       Seccion,
@@ -491,25 +510,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ Usar la nueva función que maneja todos los offsets para obtener timestamp actual
-    const fechaActualPeru = await obtenerFechaHoraActualPeru();
-    const timestampActual = fechaActualPeru.getTime();
-
-    // Calcular desfase en segundos
-    const desfaseSegundos = Math.floor(
-      (timestampActual - new Date(FechaHoraEsperadaISO).getTime()) / 1000
-    );
-
-    // Crear clave para Redis usando la función original (mantiene retrocompatibilidad)
+    // Crear clave para Redis
     const fechaHoy = await obtenerFechaActualPeru();
     let clave: string;
 
-    if (esEstudiante) {
+    if (esRegistroEstudiante) {
       // Para estudiantes: incluir nivel, grado y sección en la clave
-      clave = `${fechaHoy}:${ModoRegistro}:${actorFinal}:${idODniFinal}:${NivelDelEstudiante}:${Grado}:${Seccion}`;
+      clave = `${fechaHoy}:${ModoRegistro}:${actorFinal}:${NivelDelEstudiante}:${Grado}:${Seccion}:${idFinal}`;
     } else {
       // Para personal: clave tradicional
-      clave = `${fechaHoy}:${ModoRegistro}:${actorFinal}:${idODniFinal}`;
+      clave = `${fechaHoy}:${ModoRegistro}:${actorFinal}:${idFinal}`;
     }
 
     // Usar el TipoAsistencia determinado
@@ -520,31 +530,30 @@ export async function POST(req: NextRequest) {
     const esNuevoRegistro = !registroExistente;
 
     if (esNuevoRegistro) {
-      // Crear valor para Redis según el tipo de actor
-      if (esEstudiante) {
-        // Para estudiantes: Valor es simplemente "A" o "T"
-        const estado =
-          desfaseSegundos > MINUTOS_TOLERANCIA * 60
-            ? EstadosAsistencia.Tarde
-            : EstadosAsistencia.Temprano;
+      // Establecer la expiración
+      const segundosHastaExpiracion = await calcularSegundosHastaExpiracion();
 
-        // Establecer la expiración
-        const segundosHastaExpiracion = await calcularSegundosHastaExpiracion();
-        await redisClientInstance.set(clave, estado, segundosHastaExpiracion);
+      if (esRegistroEstudiante) {
+        // ✅ Para estudiantes: Solo [desfaseSegundos]
+        const valor = [desfaseSegundos.toString()];
+        await redisClientInstance.set(clave, valor, segundosHastaExpiracion);
       } else {
-        // Para personal: Valor es array [timestamp, desfaseSegundos]
+        // ✅ Para personal: [timestamp, desfaseSegundos] (sin cambios)
         const valor = [timestampActual.toString(), desfaseSegundos.toString()];
-
-        // Establecer la expiración
-        const segundosHastaExpiracion = await calcularSegundosHastaExpiracion();
         await redisClientInstance.set(clave, valor, segundosHastaExpiracion);
       }
     }
 
     console.log(
       `✅ Registro de asistencia: ${
-        esRegistroPropio ? "PROPIO" : "OTROS"
-      } - Actor: ${actorFinal} - ${esNuevoRegistro ? "NUEVO" : "EXISTENTE"}`
+        esRegistroPropio
+          ? "PROPIO"
+          : esRegistroEstudiante
+          ? "ESTUDIANTE"
+          : "PERSONAL"
+      } - Actor: ${actorFinal} - ${
+        esNuevoRegistro ? "NUEVO" : "EXISTENTE"
+      } - Desfase: ${desfaseSegundos}s`
     );
 
     return NextResponse.json(
@@ -554,11 +563,11 @@ export async function POST(req: NextRequest) {
           ? "Asistencia registrada correctamente"
           : "La asistencia ya había sido registrada anteriormente",
         data: {
-          timestamp: timestampActual,
+          timestamp: timestampActual || Date.now(), // Para estudiantes será la fecha actual aproximada
           desfaseSegundos,
           esNuevoRegistro,
-          esRegistroPropio: MI_ID_O_DNI === ID_o_DNI,
-          actorRegistrado: actorFinal, // ✅ Esto enviará la abreviación (D, A, PP, PS, T, R, PA, E)
+          esRegistroPropio,
+          actorRegistrado: actorFinal,
           tipoAsistencia: tipoAsistenciaFinal,
         },
       } as RegistrarAsistenciaIndividualSuccessResponse,

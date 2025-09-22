@@ -1,17 +1,13 @@
 import { useState, useCallback } from "react";
-
 import { QueryParams } from "@/interfaces/shared/CustomObjects";
 import { MethodHTTP } from "@/interfaces/MethodsHTTP";
-import getRandomAPI01IntanceURL from "@/lib/helpers/functions/getRandomAPI01InstanceURL";
-import getRandomAPI02IntanceURL from "@/lib/helpers/functions/getRandomAPI02Instance";
 
-import userStorage from "@/lib/utils/local/db/models/UserStorage";
-import { logout } from "@/lib/helpers/logout";
+import { logout } from "@/lib/utils/frontend/auth/logout";
 import { FetchCancelable } from "@/lib/utils/FetchCancellable";
 import { LogoutTypes } from "@/interfaces/LogoutTypes";
 import { SiasisAPIS } from "@/interfaces/shared/SiasisComponents";
-import getAPI01InstanceForRol from "@/lib/helpers/functions/getAPI01InstanceForRole";
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
+import { SiasisAPIsGetRandomInstanceFunctions } from "@/lib/helpers/functions/SiasisAPIsRandomFunctions";
 
 interface FetchSiasisAPIs {
   endpoint: string;
@@ -24,20 +20,16 @@ interface FetchSiasisAPIs {
 
 /**
  * Este hook recibe 2 parametros, el primero es la api a usar
- * @param siasisAPI 
- * @param loggedUserRolForAPI01 
- * @returns 
+ * @param siasisAPI
+ * @param loggedUserRolForAPI01
+ * @returns
  */
 const useSiasisAPIs = (
   siasisAPI: SiasisAPIS,
   loggedUserRolForAPI01?: RolesSistema
 ) => {
-  const urlAPI =
-    siasisAPI === "API01"
-      ? !loggedUserRolForAPI01
-        ? getRandomAPI01IntanceURL
-        : getAPI01InstanceForRol
-      : getRandomAPI02IntanceURL;
+  const getRandomInstanceForAPI =
+    SiasisAPIsGetRandomInstanceFunctions[siasisAPI];
 
   const [fetchCancelables, setFetchCancelables] = useState<FetchCancelable[]>(
     []
@@ -57,6 +49,9 @@ const useSiasisAPIs = (
 
       if (userAutheticated) {
         try {
+          const { default: userStorage } = await import(
+            "@/lib/utils/local/db/models/UserStorage"
+          );
           token = await userStorage.getAuthToken();
 
           // Si se requiere autenticación pero no hay token, hacer logout
@@ -84,7 +79,7 @@ const useSiasisAPIs = (
 
       // Crear la instancia FetchCancelable
       const fetchCancelable = new FetchCancelable(
-        `${urlAPI(loggedUserRolForAPI01!)}${endpoint}`,
+        `${getRandomInstanceForAPI()}${endpoint}`,
         {
           method,
           headers,
@@ -98,7 +93,7 @@ const useSiasisAPIs = (
 
       return fetchCancelable;
     },
-    [urlAPI]
+    [getRandomInstanceForAPI]
   );
 
   // Función para cancelar todas las peticiones pendientes

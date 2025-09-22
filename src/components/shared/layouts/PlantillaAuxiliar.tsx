@@ -18,20 +18,25 @@ const PlantillaAuxiliar = ({
   Google_Drive_Foto_ID: string | null;
 }) => {
   return (
-    <main className="  w-full grid grid-rows-[min-content_1fr_min-content] min-h-[100dvh]">
-      <Header
-        Genero={Genero}
-        Google_Drive_Foto_ID={Google_Drive_Foto_ID}
-        Nombres={Nombres}
-        Apellidos={Apellidos}
-        Rol={RolesSistema.Auxiliar}
-      />
-      <main className=" py-4 px-4 min-h-full min-w-full flex justify-center items-center">
-        {children}
-      </main>
+    <>
+      <main className="  w-full grid grid-rows-[min-content_1fr_min-content] min-h-[100dvh]">
+        <Header
+          Genero={Genero}
+          Google_Drive_Foto_ID={Google_Drive_Foto_ID}
+          Nombres={Nombres}
+          Apellidos={Apellidos}
+          Rol={RolesSistema.Auxiliar}
+        />
+        <main className=" py-4 px-4 min-h-full min-w-full flex justify-center items-center">
+          {children}
+        </main>
 
-      <NavBarFooter Rol={RolesSistema.Auxiliar} />
-    </main>
+        <NavBarFooter Rol={RolesSistema.Auxiliar} />
+      </main>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    </>
   );
 };
 export default PlantillaAuxiliar;

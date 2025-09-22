@@ -1,12 +1,11 @@
 import { QueryParams } from "@/interfaces/shared/CustomObjects";
 import { MethodHTTP } from "@/interfaces/MethodsHTTP";
-import getRandomAPI01IntanceURL from "@/lib/helpers/functions/getRandomAPI01InstanceURL";
-import getRandomAPI02IntanceURL from "@/lib/helpers/functions/getRandomAPI02Instance";
 import userStorage from "@/lib/utils/local/db/models/UserStorage";
-import { logout } from "@/lib/helpers/logout";
+import { logout } from "@/lib/utils/frontend/auth/logout";
 import { FetchCancelable } from "@/lib/utils/FetchCancellable";
 import { LogoutTypes } from "@/interfaces/LogoutTypes";
 import { SiasisAPIS } from "@/interfaces/shared/SiasisComponents";
+import { SiasisAPIsGetRandomInstanceFunctions } from "../functions/SiasisAPIsRandomFunctions";
 
 interface FetchSiasisAPIs {
   endpoint: string;
@@ -18,7 +17,9 @@ interface FetchSiasisAPIs {
 }
 
 interface FetchSiasisResult {
-  fetchSiasisAPI: (config: FetchSiasisAPIs) => Promise<FetchCancelable | undefined>;
+  fetchSiasisAPI: (
+    config: FetchSiasisAPIs
+  ) => Promise<FetchCancelable | undefined>;
   fetchCancelables: FetchCancelable[];
   cancelAllRequests: () => void;
 }
@@ -29,8 +30,8 @@ interface FetchSiasisResult {
  * @returns Objeto con funciones para realizar peticiones y gestionar cancelaciones
  */
 const fetchSiasisApiGenerator = (siasisAPI: SiasisAPIS): FetchSiasisResult => {
-  const urlAPI =
-    siasisAPI === "API01" ? getRandomAPI01IntanceURL : getRandomAPI02IntanceURL;
+  const getRandomInstanceForAPI =
+    SiasisAPIsGetRandomInstanceFunctions[siasisAPI];
 
   // Almacenamos las peticiones cancelables en una variable local
   let fetchCancelables: FetchCancelable[] = [];
@@ -49,7 +50,7 @@ const fetchSiasisApiGenerator = (siasisAPI: SiasisAPIS): FetchSiasisResult => {
     // Obtener token de manera asíncrona si el usuario debe estar autenticado
     let token: string | null = null;
 
-    if (userAutheticated) {
+    if (userAutheticated && siasisAPI !== "SIU01 API") {
       try {
         token = await userStorage.getAuthToken();
 
@@ -78,7 +79,7 @@ const fetchSiasisApiGenerator = (siasisAPI: SiasisAPIS): FetchSiasisResult => {
 
     // Crear la instancia FetchCancelable
     const fetchCancelable = new FetchCancelable(
-      `${urlAPI()}${endpoint}`,
+      `${getRandomInstanceForAPI()}${endpoint}`,
       {
         method,
         headers,

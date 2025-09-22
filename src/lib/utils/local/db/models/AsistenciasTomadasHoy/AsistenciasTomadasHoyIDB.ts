@@ -1,12 +1,11 @@
 import IndexedDBConnection from "../../IndexedDBConnection";
 import { ActoresSistema } from "@/interfaces/shared/ActoresSistema";
-import { ModoRegistro } from "@/interfaces/shared/ModoRegistroPersonal";
+import { ModoRegistro } from "@/interfaces/shared/ModoRegistro";
 import { TipoAsistencia } from "@/interfaces/shared/AsistenciaRequests";
 import { EstadosAsistenciaPersonal } from "@/interfaces/shared/EstadosAsistenciaPersonal";
-import { EstadosAsistencia } from "@/interfaces/shared/EstadosAsistenciaEstudiantes";
 import { CANTIDAD_MINUTOS_MAXIMO_PARA_DESCARTE_ASISTENCIAS } from "@/constants/CANTIDAD_MINUTOS_MAXIMO_PARA_DESCARTE_ASISTENCIAS";
 import { TablasLocal } from "@/interfaces/shared/TablasSistema";
-import { AsistenciaDePersonalDateHelper } from "../AsistenciaDePersonal/services/AsistenciaDePersonalDateHelper";
+import { AsistenciaDateHelper } from "../utils/AsistenciaDateHelper";
 import {
   SEGUNDOS_TOLERANCIA_ENTRADA_PERSONAL,
   SEGUNDOS_TOLERANCIA_SALIDA_PERSONAL,
@@ -32,7 +31,7 @@ export interface AsistenciaPersonalHoy extends AsistenciaHoyBase {
 
 // ✅ INTERFAZ: Asistencia de estudiante
 export interface AsistenciaEstudianteHoy extends AsistenciaHoyBase {
-  estado: EstadosAsistencia;
+  estado: EstadosAsistenciaPersonal;
   nivelEducativo?: string;
   grado?: string;
   seccion?: string;
@@ -43,7 +42,7 @@ export type AsistenciaHoy = AsistenciaPersonalHoy | AsistenciaEstudianteHoy;
 
 // ✅ INTERFAZ: Para consultas específicas
 export interface ConsultaAsistenciaHoy {
-  id_o_dni: string | number;
+  idUsuario: string | number;
   actor: ActoresSistema;
   modoRegistro: ModoRegistro;
   tipoAsistencia: TipoAsistencia;
@@ -67,10 +66,10 @@ export interface ConsultaAsistenciaHoy {
  */
 export class AsistenciasTomadasHoyIDB {
   private nombreTabla: string = TablasLocal.Tabla_Asistencias_Tomadas_Hoy;
-  private dateHelper: AsistenciaDePersonalDateHelper; // ✅ NUEVO: Dependencia de DateHelper
+  private dateHelper: AsistenciaDateHelper; // ✅ NUEVO: Dependencia de DateHelper
   private intervalos: NodeJS.Timeout[] = []; // ✅ NUEVO: Para limpiar intervalos
 
-  constructor(dateHelper: AsistenciaDePersonalDateHelper) {
+  constructor(dateHelper: AsistenciaDateHelper) {
     // ✅ NUEVO: Constructor con dependencia
     this.dateHelper = dateHelper;
   }
@@ -88,18 +87,18 @@ export class AsistenciasTomadasHoyIDB {
       consulta.fecha ||
       this.dateHelper.obtenerFechaStringActual() ||
       this.obtenerFechaHoyFallback();
-    const base = `${fecha}:${consulta.modoRegistro}:${consulta.actor}:${consulta.id_o_dni}`;
+    const base = `${fecha}:${consulta.modoRegistro}:${consulta.actor}`;
 
     // ✅ FORMATO ESTUDIANTE: Siempre incluir nivel, grado y sección
     if (consulta.actor === ActoresSistema.Estudiante) {
       const nivel = consulta.nivelEducativo || "UNKNOWN";
-      const grado = consulta.grado || "0";
-      const seccion = consulta.seccion || "X";
+      const grado = consulta.grado!;
+      const seccion = consulta.seccion!;
       return `${base}:${nivel}:${grado}:${seccion}`;
     }
 
     // ✅ FORMATO PERSONAL: Solo la clave base
-    return base;
+    return `${base}:${consulta.idUsuario}`;
   }
 
   /**
@@ -238,7 +237,7 @@ export class AsistenciasTomadasHoyIDB {
 
       if (actor === ActoresSistema.Estudiante) {
         // ✅ ASISTENCIA DE ESTUDIANTE: El valor es un estado (string)
-        const estado = valor as EstadosAsistencia;
+        const estado = valor as EstadosAsistenciaPersonal;
 
         asistenciaCache = {
           clave,

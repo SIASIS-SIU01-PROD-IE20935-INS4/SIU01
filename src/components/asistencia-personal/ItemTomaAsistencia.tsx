@@ -2,14 +2,14 @@ import { Genero } from "@/interfaces/shared/Genero";
 import FotoPerfilClientSide from "../utils/photos/FotoPerfilClientSide";
 import { CheckCircle, Loader2, X, Trash2, Clock } from "lucide-react";
 import {
-  AsistenciaDiariaResultado,
+  AsistenciaDiariaDePersonalResultado,
   DetallesAsistenciaUnitariaPersonal,
 } from "@/interfaces/shared/AsistenciaRequests";
 import { useState } from "react";
 import { CANTIDAD_MINUTOS_MAXIMO_PARA_DESCARTAR_ASISTENCIA_DE_PERSONAL } from "@/constants/CANTIDAD_MINUTOS_MAXIMO_PARA_DESCARTE_ASISTENCIAS";
 
 export interface PersonalParaTomarAsistencia {
-  ID_o_DNI: string;
+  idUsuario: string;
   GoogleDriveFotoId: string | null;
   Nombres: string;
   Apellidos: string;
@@ -33,7 +33,7 @@ const ItemTomaAsistencia = ({
   handleEliminarAsistencia?: (
     personal: PersonalParaTomarAsistencia
   ) => Promise<void>;
-  asistenciaRegistrada?: AsistenciaDiariaResultado | null; // ← NUEVO
+  asistenciaRegistrada?: AsistenciaDiariaDePersonalResultado | null; // ← NUEVO
   timestampActual?: number; // ← NUEVO: desde Redux
   disabled?: boolean;
   loading?: boolean;

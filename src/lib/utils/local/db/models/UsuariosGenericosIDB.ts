@@ -11,6 +11,8 @@ import AllErrorTypes, { SystemErrorTypes } from "@/interfaces/shared/errors";
 import fetchSiasisApiGenerator from "@/lib/helpers/generators/fetchSiasisApisGenerator";
 import UltimaModificacionTablasIDB from "./UltimaModificacionTablasIDB";
 import { TablasRemoto } from "@/interfaces/shared/TablasSistema";
+import { Endpoint_Get_Usuarios_Genericos_API01 } from "@/lib/utils/backend/endpoints/api01/UsuariosGenericos";
+import { PersonalDelColegio } from "@/interfaces/shared/PersonalDelColegio";
 
 // Interfaz para el registro de cache
 export interface IUsuariosGenericosCache {
@@ -40,8 +42,8 @@ export class UsuariosGenericosIDB {
 
   constructor(
     private siasisAPI: SiasisAPIS,
-    private setIsSomethingLoading: (isLoading: boolean) => void,
-    private setError: (error: ErrorResponseAPIBase | null) => void,
+    private setIsSomethingLoading?: (isLoading: boolean) => void,
+    private setError?: (error: ErrorResponseAPIBase | null) => void,
     private setSuccessMessage?: (message: MessageProperty | null) => void
   ) {}
 
@@ -107,31 +109,14 @@ export class UsuariosGenericosIDB {
     limite: number
   ): Promise<{ resultados: GenericUser[]; total: number }> {
     try {
-      const { fetchSiasisAPI } = fetchSiasisApiGenerator(this.siasisAPI);
-
-      const fetchCancelable = await fetchSiasisAPI({
-        endpoint: "/api/usuarios-genericos",
-        method: "GET",
-        queryParams: {
-          Rol: rol,
-          Criterio: criterio.trim(),
-          Limite: limite,
-        },
-      });
-
-      if (!fetchCancelable) {
-        throw new Error("No se pudo crear la petición");
-      }
-
-      const response = await fetchCancelable.fetch();
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error en la petición");
-      }
-
       const responseData =
-        (await response.json()) as GetGenericUsersSuccessResponse;
+        await Endpoint_Get_Usuarios_Genericos_API01.realizarPeticion({
+          queryParams: {
+            Criterio: criterio.trim(),
+            Limite: limite,
+            Rol: rol as PersonalDelColegio,
+          },
+        });
 
       return {
         resultados: responseData.data || [],
@@ -155,7 +140,7 @@ export class UsuariosGenericosIDB {
         }
       }
 
-      this.setError({
+      this.setError?.({
         success: false,
         message: message,
         errorType: errorType,
@@ -232,18 +217,18 @@ export class UsuariosGenericosIDB {
     criterio: string,
     limite: number
   ): Promise<{ resultados: GenericUser[]; total: number }> {
-    this.setIsSomethingLoading(true);
-    this.setError(null);
+    this.setIsSomethingLoading?.(true);
+    this.setError?.(null);
     this.setSuccessMessage?.(null);
 
     try {
       // Validar parámetros
       if (criterio.trim().length > 0 && criterio.trim().length < 2) {
-        this.setError({
+        this.setError?.({
           success: false,
           message: "El criterio de búsqueda debe tener al menos 2 caracteres",
         });
-        this.setIsSomethingLoading(false);
+        this.setIsSomethingLoading?.(false);
         return { resultados: [], total: 0 };
       }
 
@@ -262,7 +247,7 @@ export class UsuariosGenericosIDB {
           this.setSuccessMessage?.({
             message: `Se encontraron ${registroCache.resultados.length} usuarios (desde cache)`,
           });
-          this.setIsSomethingLoading(false);
+          this.setIsSomethingLoading?.(false);
           return {
             resultados: registroCache.resultados,
             total: registroCache.total,
@@ -295,11 +280,11 @@ export class UsuariosGenericosIDB {
         message: `Se encontraron ${resultados.length} usuarios`,
       });
 
-      this.setIsSomethingLoading(false);
+      this.setIsSomethingLoading?.(false);
       return { resultados, total };
     } catch (error) {
       this.handleIndexedDBError(error, "buscar usuarios");
-      this.setIsSomethingLoading(false);
+      this.setIsSomethingLoading?.(false);
       return { resultados: [], total: 0 };
     }
   }
@@ -387,7 +372,7 @@ export class UsuariosGenericosIDB {
       }
     }
 
-    this.setError({
+    this.setError?.({
       success: false,
       message: message,
       errorType: errorType,

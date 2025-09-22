@@ -18,12 +18,13 @@ import { HandlerDirectivoAsistenciaResponse } from "@/lib/utils/local/db/models/
 import {
   ModoRegistro,
   modoRegistroTextos,
-} from "@/interfaces/shared/ModoRegistroPersonal";
+} from "@/interfaces/shared/ModoRegistro";
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
 import DirectivoIcon from "../icons/DirectivoIcon";
 import { AsistenciaHoy } from "@/lib/utils/local/db/models/AsistenciasTomadasHoy/AsistenciasTomadasHoyIDB";
-import IndexedDBConnection from "@/lib/utils/local/db/IndexedDBConnection";
+
 import { saludosDia } from "@/Assets/voice/others/SaludosDelDia";
+import IndexedDBConnection from "@/constants/singleton/IndexedDBConnection";
 
 const FullScreenModalAsistenciaPersonal = ({
   closeFullScreenModal,

@@ -6,7 +6,6 @@ import {
   TablasLocal,
 } from "../../../../../interfaces/shared/TablasSistema";
 import {
-  ApiResponseBase,
   ErrorResponseAPIBase,
   MessageProperty,
 } from "@/interfaces/shared/apis/types";
@@ -17,16 +16,15 @@ import AllErrorTypes, {
 } from "../../../../../interfaces/shared/errors";
 import { SiasisAPIS } from "@/interfaces/shared/SiasisComponents";
 import comprobarSincronizacionDeTabla from "@/lib/helpers/validations/comprobarSincronizacionDeTabla";
-import fetchSiasisApiGenerator from "@/lib/helpers/generators/fetchSiasisApisGenerator";
 import ultimaActualizacionTablasLocalesIDB from "./UltimaActualizacionTablasLocalesIDB";
 import { DatabaseModificationOperations } from "@/interfaces/shared/DatabaseModificationOperations";
-import { GetPersonalAdministrativoSuccessResponse } from "@/interfaces/shared/apis/api01/personal-administrativo/types";
+import { Endpoint_Get_Personal_Administrativo_API01 } from "@/lib/utils/backend/endpoints/api01/PersonalAdministrativo";
 
 // Tipo para la entidad (sin atributos de fechas)
 export type IPersonalAdministrativoLocal = PersonalAdministrativoSinContraseña;
 
 export interface IPersonalAdministrativoFilter {
-  DNI_Personal_Administrativo?: string;
+  Id_Personal_Administrativo?: string;
   Nombres?: string;
   Apellidos?: string;
   Estado?: boolean;
@@ -39,9 +37,9 @@ export class PersonalAdministrativoIDB {
     this.tablaInfo.nombreLocal || "personal_administrativo";
 
   constructor(
-    private siasisAPI: SiasisAPIS,
-    private setIsSomethingLoading: (isLoading: boolean) => void,
-    private setError: (error: ErrorResponseAPIBase | null) => void,
+    private siasisAPI: SiasisAPIS = "API01",
+    private setIsSomethingLoading?: (isLoading: boolean) => void,
+    private setError?: (error: ErrorResponseAPIBase | null) => void,
     private setSuccessMessage?: (message: MessageProperty | null) => void
   ) {}
 
@@ -52,7 +50,7 @@ export class PersonalAdministrativoIDB {
     try {
       const debeSincronizar = await comprobarSincronizacionDeTabla(
         this.tablaInfo,
-        "API01"
+        this.siasisAPI
       );
 
       if (!debeSincronizar) {
@@ -77,41 +75,9 @@ export class PersonalAdministrativoIDB {
    */
   private async fetchYActualizarPersonalAdministrativo(): Promise<void> {
     try {
-      // Usar el generador para API01 (o la que corresponda)
-      const { fetchSiasisAPI } = fetchSiasisApiGenerator(this.siasisAPI);
-
-      // Realizar la petición al endpoint
-      const fetchCancelable = await fetchSiasisAPI({
-        endpoint: "/api/personal-administrativo",
-        method: "GET",
-      });
-
-      if (!fetchCancelable) {
-        throw new Error(
-          "No se pudo crear la petición de personal administrativo"
-        );
-      }
-
-      // Ejecutar la petición
-      const response = await fetchCancelable.fetch();
-
-      if (!response.ok) {
-        throw new Error(
-          `Error al obtener personal administrativo: ${response.statusText}`
-        );
-      }
-
-      const objectResponse = (await response.json()) as ApiResponseBase;
-
-      if (!objectResponse.success) {
-        throw new Error(
-          `Error en respuesta de personal administrativo: ${objectResponse.message}`
-        );
-      }
-
       // Extraer el personal administrativo del cuerpo de la respuesta
       const { data: personalAdministrativo } =
-        objectResponse as GetPersonalAdministrativoSuccessResponse;
+        await Endpoint_Get_Personal_Administrativo_API01.realizarPeticion();
 
       // Actualizar personal administrativo en la base de datos local
       const result = await this.upsertFromServer(personalAdministrativo);
@@ -163,7 +129,7 @@ export class PersonalAdministrativoIDB {
       }
 
       // Establecer el error en el estado global
-      this.setError({
+      this.setError?.({
         success: false,
         message: message,
         errorType: errorType,
@@ -186,8 +152,8 @@ export class PersonalAdministrativoIDB {
   public async getAll(
     includeInactive: boolean = true
   ): Promise<IPersonalAdministrativoLocal[]> {
-    this.setIsSomethingLoading(true);
-    this.setError(null); // Limpiar errores anteriores
+    this.setIsSomethingLoading?.(true);
+    this.setError?.(null); // Limpiar errores anteriores
     this.setSuccessMessage?.(null); // Limpiar mensajes anteriores
 
     try {
@@ -222,14 +188,14 @@ export class PersonalAdministrativoIDB {
         this.handleSuccess("No se encontró personal administrativo");
       }
 
-      this.setIsSomethingLoading(false);
+      this.setIsSomethingLoading?.(false);
       return personalAdministrativo;
     } catch (error) {
       this.handleIndexedDBError(
         error,
         "obtener lista de personal administrativo"
       );
-      this.setIsSomethingLoading(false);
+      this.setIsSomethingLoading?.(false);
       return []; // Devolvemos array vacío en caso de error
     }
   }
@@ -251,7 +217,7 @@ export class PersonalAdministrativoIDB {
             .result as IDBCursorWithValue;
           if (cursor) {
             // Añadir el DNI del personal administrativo actual
-            dnis.push(cursor.value.DNI_Personal_Administrativo);
+            dnis.push(cursor.value.Id_Personal_Administrativo);
             cursor.continue();
           } else {
             // No hay más registros, resolvemos con el array de DNIs
@@ -327,7 +293,7 @@ export class PersonalAdministrativoIDB {
       // 2. Crear conjunto de DNIs del servidor para búsqueda rápida
       const dnisServidor = new Set(
         personalAdministrativoServidor.map(
-          (personal) => personal.DNI_Personal_Administrativo
+          (personal) => personal.Id_Personal_Administrativo
         )
       );
 
@@ -362,8 +328,8 @@ export class PersonalAdministrativoIDB {
         for (const personalServidor of lote) {
           try {
             // Verificar si ya existe el personal administrativo
-            const existePersonal = await this.getByDNI(
-              personalServidor.DNI_Personal_Administrativo
+            const existePersonal = await this.getById(
+              personalServidor.Id_Personal_Administrativo
             );
 
             // Obtener un store fresco para cada operación
@@ -388,7 +354,7 @@ export class PersonalAdministrativoIDB {
               request.onerror = () => {
                 result.errors++;
                 console.error(
-                  `Error al guardar personal administrativo ${personalServidor.DNI_Personal_Administrativo}:`,
+                  `Error al guardar personal administrativo ${personalServidor.Id_Personal_Administrativo}:`,
                   request.error
                 );
                 reject(request.error);
@@ -397,7 +363,7 @@ export class PersonalAdministrativoIDB {
           } catch (error) {
             result.errors++;
             console.error(
-              `Error al procesar personal administrativo ${personalServidor.DNI_Personal_Administrativo}:`,
+              `Error al procesar personal administrativo ${personalServidor.Id_Personal_Administrativo}:`,
               error
             );
           }
@@ -420,7 +386,7 @@ export class PersonalAdministrativoIDB {
    * @param dni DNI del personal administrativo
    * @returns Personal administrativo encontrado o null
    */
-  public async getByDNI(
+  public async getById(
     dni: string
   ): Promise<IPersonalAdministrativoLocal | null> {
     try {
@@ -528,7 +494,7 @@ export class PersonalAdministrativoIDB {
       }
     }
 
-    this.setError({
+    this.setError?.({
       success: false,
       message: message,
       errorType: errorType,

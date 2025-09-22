@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ActoresSistema } from "@/interfaces/shared/ActoresSistema";
-import { ModoRegistro } from "@/interfaces/shared/ModoRegistroPersonal";
+import { ModoRegistro } from "@/interfaces/shared/ModoRegistro";
 import { redisClient } from "../../../../../config/Redis/RedisClient";
 import { verifyAuthToken } from "@/lib/utils/backend/auth/functions/jwtComprobations";
 import { RolesSistema } from "@/interfaces/shared/RolesSistema";
@@ -160,7 +160,7 @@ export async function DELETE(req: NextRequest) {
     const body = (await req.json()) as EliminarAsistenciaRequestBody;
 
     const {
-      ID_o_DNI,
+      Id_Usuario,
       Actor,
       ModoRegistro,
       TipoAsistencia: tipoAsistencia,
@@ -171,7 +171,7 @@ export async function DELETE(req: NextRequest) {
     } = body;
 
     // Validar DNI
-    const dniValidation = validateDNI(ID_o_DNI, true);
+    const dniValidation = validateDNI(Id_Usuario, true);
     //El directivo tendra ID
     if (!dniValidation.isValid && Actor !== ActoresSistema.Directivo) {
       return NextResponse.json(
@@ -251,7 +251,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Determinar la fecha a usar
-    const fechaEliminacion = Fecha || await obtenerFechaActualPeru();
+    const fechaEliminacion = Fecha || (await obtenerFechaActualPeru());
 
     // Validar formato de fecha si se proporciona
     if (Fecha && !/^\d{4}-\d{2}-\d{2}$/.test(Fecha)) {
@@ -278,7 +278,7 @@ export async function DELETE(req: NextRequest) {
           fechaEliminacion,
           ModoRegistro,
           Actor,
-          ID_o_DNI,
+          Id_Usuario,
           NivelEducativo,
           Grado,
           Seccion
@@ -290,7 +290,7 @@ export async function DELETE(req: NextRequest) {
           fechaEliminacion,
           ModoRegistro,
           Actor,
-          ID_o_DNI
+          Id_Usuario
         );
       }
     } else {
@@ -299,7 +299,7 @@ export async function DELETE(req: NextRequest) {
         fechaEliminacion,
         ModoRegistro,
         Actor,
-        ID_o_DNI
+        Id_Usuario
       );
     }
 

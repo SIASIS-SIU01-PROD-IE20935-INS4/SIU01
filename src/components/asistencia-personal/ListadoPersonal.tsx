@@ -5,19 +5,16 @@ import { Speaker } from "../../lib/utils/voice/Speaker";
 import {
   ModoRegistro,
   modoRegistroTextos,
-} from "@/interfaces/shared/ModoRegistroPersonal";
+} from "@/interfaces/shared/ModoRegistro";
 import { HandlerDirectivoAsistenciaResponse } from "@/lib/utils/local/db/models/DatosAsistenciaHoy/handlers/HandlerDirectivoAsistenciaResponse";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 import { AsistenciaDePersonalIDB } from "../../lib/utils/local/db/models/AsistenciaDePersonal/AsistenciaDePersonalIDB";
 import { FechaHoraActualRealState } from "@/global/state/others/fechaHoraActualReal";
-import {
-  PersonalDelColegio,
-  RolesSistema,
-} from "@/interfaces/shared/RolesSistema";
+import { RolesSistema } from "@/interfaces/shared/RolesSistema";
 import { Loader2 } from "lucide-react";
-import { AsistenciaDiariaResultado } from "@/interfaces/shared/AsistenciaRequests";
+import { AsistenciaDiariaDePersonalResultado } from "@/interfaces/shared/AsistenciaRequests";
 import { ErrorResponseAPIBase } from "@/interfaces/shared/apis/types";
 import { useSelector } from "react-redux";
 import { RootState } from "@/global/store";
@@ -26,6 +23,7 @@ import { TomaAsistenciaPersonalSIU01Events } from "@/SS01/sockets/events/Asisten
 
 import { SALAS_TOMA_ASISTENCIA_PERSONAL_IE20935_MAPPER } from "../../SS01/sockets/events/AsistenciaDePersonal/interfaces/SalasTomaAsistenciaDePersonal";
 import { Genero } from "@/interfaces/shared/Genero";
+import { PersonalDelColegio } from "@/interfaces/shared/PersonalDelColegio";
 
 // ========================================================================================
 // CONFIGURACIÓN DE SOCKET Y TIMEOUT
@@ -189,7 +187,7 @@ export const ListaPersonal = ({
 
   const marcarAsistenciaEnElRestoDeSesionesPorSS01 = useCallback(
     async (
-      id_o_dni: string | number,
+      idUsuario: string | number,
       nombres: string,
       apellidos: string,
       genero: Genero
@@ -203,7 +201,7 @@ export const ListaPersonal = ({
 
       const asistenciaRecienRegistrada =
         await asistenciaDePersonalIDB.consultarAsistenciaDeHoyDePersonal(
-          id_o_dni,
+          idUsuario,
           modoRegistro,
           rol
         );
@@ -213,7 +211,7 @@ export const ListaPersonal = ({
         new TomaAsistenciaPersonalSIU01Events.MARQUE_LA_ASISTENCIA_DE_ESTE_PERSONAL_EMITTER(
           {
             Mi_Socket_Id: globalSocket?.id,
-            id_o_dni,
+            idUsuario,
             genero,
             nombres,
             apellidos,
@@ -242,7 +240,7 @@ export const ListaPersonal = ({
 
   const eliminarAsistenciaEnElRestoDeSesionesPorSS01 = useCallback(
     async (
-      id_o_dni: string | number,
+      idUsuario: string | number,
       nombres: string,
       apellidos: string,
       genero: Genero
@@ -259,7 +257,7 @@ export const ListaPersonal = ({
         new TomaAsistenciaPersonalSIU01Events.ELIMINE_LA_ASISTENCIA_DE_ESTE_PERSONAL_EMITTER(
           {
             Mi_Socket_Id: globalSocket.id,
-            id_o_dni,
+            idUsuario,
             genero,
             nombres,
             apellidos,
@@ -302,7 +300,7 @@ export const ListaPersonal = ({
 
   // ✅ NUEVO: Estado para almacenar las asistencias registradas por DNI
   const [asistenciasRegistradas, setAsistenciasRegistradas] = useState<
-    Map<string, AsistenciaDiariaResultado>
+    Map<string, AsistenciaDiariaDePersonalResultado>
   >(new Map());
 
   // Estados para el sistema de manejo de errores
@@ -357,7 +355,10 @@ export const ListaPersonal = ({
 
         if (resultado.exitoso && resultado.datos) {
           // Crear mapa de asistencias por DNI
-          const mapaAsistencias = new Map<string, AsistenciaDiariaResultado>();
+          const mapaAsistencias = new Map<
+            string,
+            AsistenciaDiariaDePersonalResultado
+          >();
 
           const resultados = Array.isArray(resultado.datos.Resultados)
             ? resultado.datos.Resultados
@@ -365,8 +366,8 @@ export const ListaPersonal = ({
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           resultados.forEach((resultado: any) => {
-            if (resultado && resultado.ID_o_DNI) {
-              mapaAsistencias.set(resultado.ID_o_DNI, resultado);
+            if (resultado && resultado.idUsuario) {
+              mapaAsistencias.set(resultado.idUsuario, resultado);
             }
           });
 
@@ -406,14 +407,14 @@ export const ListaPersonal = ({
   ) => {
     if (procesando !== null) return;
 
-    setProcesando(personal.ID_o_DNI);
+    setProcesando(personal.idUsuario);
 
     try {
       // Obtener la hora esperada
       const horaEsperadaISO =
         handlerDatosAsistenciaHoyDirectivo.obtenerHorarioPersonalISO(
           rol!,
-          personal.ID_o_DNI,
+          personal.idUsuario,
           modoRegistro
         );
 
@@ -422,7 +423,7 @@ export const ListaPersonal = ({
         {
           datos: {
             ModoRegistro: modoRegistro,
-            DNI: personal.ID_o_DNI,
+            DNI: personal.idUsuario,
             Rol: rol!,
             Dia: fechaHoraActual.utilidades!.diaMes,
           },
@@ -431,7 +432,7 @@ export const ListaPersonal = ({
       );
 
       marcarAsistenciaEnElRestoDeSesionesPorSS01(
-        personal.ID_o_DNI,
+        personal.idUsuario,
         personal.Nombres,
         personal.Apellidos,
         personal.Genero
@@ -440,7 +441,7 @@ export const ListaPersonal = ({
       actualizarInterfazPorNuevaMarcacion(
         personal.Nombres,
         personal.Apellidos,
-        personal.ID_o_DNI
+        personal.idUsuario
       );
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -458,7 +459,7 @@ export const ListaPersonal = ({
   const actualizarInterfazPorNuevaMarcacion = (
     Nombres: string,
     Apellidos: string,
-    ID_o_DNI: string
+    idUsuario: string
   ) => {
     // Feedback por voz
     const speaker = Speaker.getInstance();
@@ -473,9 +474,9 @@ export const ListaPersonal = ({
     const timestampActual = fechaHoraRedux.utilidades?.timestamp
       ? fechaHoraRedux.utilidades?.timestamp - OFFSET_PERU_MS
       : Date.now();
-      
-    const nuevoRegistro: AsistenciaDiariaResultado = {
-      ID_o_DNI,
+
+    const nuevoRegistro: AsistenciaDiariaDePersonalResultado = {
+      idUsuario,
       AsistenciaMarcada: true,
       Detalles: {
         Timestamp: timestampActual,
@@ -485,7 +486,7 @@ export const ListaPersonal = ({
 
     setAsistenciasRegistradas((prev) => {
       const nuevo = new Map(prev);
-      nuevo.set(ID_o_DNI, nuevoRegistro);
+      nuevo.set(idUsuario, nuevoRegistro);
       return nuevo;
     });
   };
@@ -519,7 +520,7 @@ export const ListaPersonal = ({
     seAcabaDeMarcarLaAsistenciaDeEstePersonalHandlerRef.current =
       new TomaAsistenciaPersonalSIU01Events.SE_ACABA_DE_MARCAR_LA_ASISTENCIA_DE_ESTE_PERSONAL_HANDLER(
         async ({
-          id_o_dni,
+          idUsuario,
           nombres,
           apellidos,
           modoRegistro,
@@ -530,7 +531,7 @@ export const ListaPersonal = ({
           if (globalSocket.id == Mi_Socket_Id) return;
 
           await asistenciaDePersonalIDB.marcarAsistenciaEnLocal(
-            id_o_dni,
+            idUsuario,
             rol,
             modoRegistro,
             RegistroEntradaSalida
@@ -539,7 +540,7 @@ export const ListaPersonal = ({
           actualizarInterfazPorNuevaMarcacion(
             nombres,
             apellidos,
-            String(id_o_dni)
+            String(idUsuario)
           );
         }
       );
@@ -551,7 +552,7 @@ export const ListaPersonal = ({
       new TomaAsistenciaPersonalSIU01Events.SE_ACABA_DE_ELIMINAR_LA_ASISTENCIA_DE_ESTE_PERSONAL_HANDLER(
         async ({
           Mi_Socket_Id,
-          id_o_dni,
+          idUsuario,
           nombres,
           apellidos,
           modoRegistro,
@@ -561,13 +562,13 @@ export const ListaPersonal = ({
           if (globalSocket.id == Mi_Socket_Id) return;
 
           await asistenciaDePersonalIDB.eliminarAsistenciaEnLocal(
-            id_o_dni,
+            idUsuario,
             rol,
             modoRegistro
           );
 
           actualizarInterfazPorEliminacionDeAsistencia({
-            ID_o_DNI: String(id_o_dni),
+            idUsuario: String(idUsuario),
             Nombres: nombres,
             Apellidos: apellidos,
             Genero: genero,
@@ -596,7 +597,7 @@ export const ListaPersonal = ({
     // ✅ Actualizar el mapa de asistencias registradas (eliminar la entrada)
     setAsistenciasRegistradas((prev) => {
       const nuevo = new Map(prev);
-      nuevo.delete(personal.ID_o_DNI);
+      nuevo.delete(personal.idUsuario);
       return nuevo;
     });
 
@@ -620,15 +621,15 @@ export const ListaPersonal = ({
     if (eliminandoAsistencia !== null) return;
 
     try {
-      setEliminandoAsistencia(personal.ID_o_DNI);
+      setEliminandoAsistencia(personal.idUsuario);
 
       console.log(
-        `🗑️ Iniciando eliminación de asistencia para: ${personal.ID_o_DNI}`
+        `🗑️ Iniciando eliminación de asistencia para: ${personal.idUsuario}`
       );
 
       // Eliminar usando el modelo de IndexedDB
       const resultado = await asistenciaDePersonalIDB.eliminarAsistencia({
-        id_o_dni: personal.ID_o_DNI,
+        idUsuario: personal.idUsuario,
         rol: rol,
         modoRegistro: modoRegistro,
       });
@@ -637,7 +638,7 @@ export const ListaPersonal = ({
         actualizarInterfazPorEliminacionDeAsistencia(personal);
 
         eliminarAsistenciaEnElRestoDeSesionesPorSS01(
-          personal.ID_o_DNI,
+          personal.idUsuario,
           personal.Nombres,
           personal.Apellidos,
           personal.Genero
@@ -744,7 +745,7 @@ export const ListaPersonal = ({
   return (
     <div className="h-full w-full flex flex-col pb-3 px-4 sm-only:pb-4 sm-only:px-3 md-only:pb-4 md-only:px-3 lg-only:pb-4 lg-only:px-4 xl-only:pb-4 xl-only:px-4 bg-gradient-to-b from-white to-gray-50 overflow-auto">
       {/* Encabezados fijos en la parte superior - CON MENSAJE INFORMATIVO */}
-      <div className="sticky top-0 bg-[#ffffffcc] [backdrop-filter:blur(10px)] py-2 sm-only:py-3 md-only:py-3 lg-only:py-3 xl-only:py-4 z-11 mb-2">
+      <div className="sticky top-0 bg-[#ffffff34] [backdrop-filter:blur(10px)] py-2 sm-only:py-3 md-only:py-3 lg-only:py-3 xl-only:py-4 z-[1] mb-2">
         <h2 className="text-base sm-only:text-lg md-only:text-lg lg-only:text-lg xl-only:text-xl font-bold text-blue-800 text-center leading-tight">
           {modoRegistroTextos[modoRegistro]} | {textoRol}
         </h2>
@@ -781,14 +782,14 @@ export const ListaPersonal = ({
       </div>
 
       {/* Contenedor centrado para las tarjetas */}
-      <div className="flex-1 flex justify-center">
+      <div className="z-0 flex-1 flex justify-center">
         <div className="max-w-4xl w-full">
           {/* Lista de personas con flex-wrap */}
           <div className="flex flex-wrap justify-center gap-2 sm-only:gap-3 md-only:gap-3 lg-only:gap-3 xl-only:gap-3">
             {personal.map((persona, index) => {
               // ✅ NUEVO: Obtener la asistencia registrada para esta persona
               const asistenciaPersona = asistenciasRegistradas.get(
-                persona.ID_o_DNI
+                persona.idUsuario
               );
 
               return (
@@ -799,8 +800,8 @@ export const ListaPersonal = ({
                   handleEliminarAsistencia={handleEliminarAsistencia} // ← NUEVO: Pasar función de eliminación
                   asistenciaRegistrada={asistenciaPersona} // ← NUEVO: Pasar los datos de asistencia
                   timestampActual={timestampActual} // ← NUEVO: Pasar timestamp de Redux
-                  loading={procesando === persona.ID_o_DNI}
-                  eliminando={eliminandoAsistencia === persona.ID_o_DNI} // ← NUEVO: Estado de eliminación
+                  loading={procesando === persona.idUsuario}
+                  eliminando={eliminandoAsistencia === persona.idUsuario} // ← NUEVO: Estado de eliminación
                   globalLoading={cargandoAsistencias || isLoading}
                 />
               );
